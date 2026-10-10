@@ -688,3 +688,16 @@ def test_solo_teclas_de_la_lista_blanca_llegan_al_escritorio():
     fake = FakeEscritorio()
     _correr_con(FakeCliente(plan, acciones), fake)
     assert [a for a in fake.acciones if a[0] == "tecla"] == [("tecla", "escape")]
+
+
+def test_prompt_del_ejecutor_trae_la_regla_generica_de_dialogos():
+    from rookie.roles.prompts import EJECUTOR_SYSTEM
+    assert "DIÁLOGOS INESPERADOS" in EJECUTOR_SYSTEM
+    assert "Entendido" in EJECUTOR_SYSTEM and "NUNCA lo aceptes" in EJECUTOR_SYSTEM
+
+
+def test_clic_en_cerrar_un_aviso_no_pasa_por_compuertas_criticas():
+    plan = _plan(tipo="actualizar")
+    for elemento in ("botón Entendido", "botón Aceptar del aviso de novedades", "botón Cerrar"):
+        a = E._compuerta_inferida(Accion(tipo="click", x=1, y=1, elemento=elemento), plan)
+        assert a.compuerta is None
