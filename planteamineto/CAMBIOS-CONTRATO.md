@@ -45,7 +45,7 @@ Cada entrada: fecha y hora, fase, qué cambia, por qué y si rompe algo.
 - **Por qué:** igual que `coincidencias`, en modo strict un dict de claves libres salía vacío. En
   E4 el plan llegó con `filtros={}` y el juez rechazaba la exportación («hay otros filtros»).
 
-## 2026-10-10 17:00 · Fase H2 · `GET /tasks` lista las tareas en curso (aditivo, no rompe nada)
+## 2026-10-10 16:24 · Fase H2 · `GET /tasks` lista las tareas en curso (aditivo, no rompe nada)
 
 - **Qué:** nueva ruta autenticada `GET /tasks` → `{"en_curso": ["<task_id>", …]}` (`Motor.en_curso()`).
   `/health`, `POST /tasks` y `GET /tasks/{id}` no cambian.
