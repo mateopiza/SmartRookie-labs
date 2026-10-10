@@ -114,6 +114,26 @@ def _duplicados(plan: Plan, coincidencias: list[dict]) -> list[dict]:
     return [f for f in coincidencias if any(_norm(str(v)) in claves for v in f.values())]
 
 
+_VERBOS_CRITICOS = (
+    ("eliminar", "eliminar"), ("borrar", "eliminar"), ("anular", "eliminar"),
+    ("exportar", "exportar"), ("guardar", "guardar"),
+)
+
+
+def _compuerta_inferida(accion: Accion, plan: Plan) -> Accion:
+    """Un clic sobre un botón que NOMBRA una acción irreversible pasa por su compuerta aunque el
+    modelo no la marque (visto en E4: tras dos rechazos del juez pulsó Exportar sin compuerta)."""
+    if accion.compuerta is not None or accion.tipo not in {"click", "doble_click"}:
+        return accion
+    elemento = _norm(accion.elemento)
+    for verbo, compuerta in _VERBOS_CRITICOS:
+        if verbo in elemento:
+            if compuerta == "guardar" and plan.tipo == "crear":
+                compuerta = "crear"
+            return accion.model_copy(update={"compuerta": compuerta})
+    return accion
+
+
 def _campo_de(accion: Accion, plan: Plan) -> str:
     if len(plan.cambios_autorizados) == 1:
         return _norm(plan.cambios_autorizados[0].campo)
@@ -583,6 +603,8 @@ async def _bucle(
                 cliente, plan, propuesto, escritorio, guardias, task_id, grabador,
                 obs_terminar=obs_actual, evidencias=evidencias,
             )
+
+        accion = _compuerta_inferida(accion, plan)
 
         # g. detección de bucle sobre pantalla sin cambios
         clave_rep = (_firma(accion), obs_actual.hash)

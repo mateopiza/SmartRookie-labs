@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, SecretStr, WithJsonSchema
+from pydantic import BaseModel, BeforeValidator, SecretStr, WithJsonSchema
 
 
 class EscritorioEntrada(BaseModel):
@@ -42,13 +42,38 @@ class Pregunta(BaseModel):
     formato: Literal["numero", "texto"]
 
 
+def _pares_a_dict(v: object) -> object:
+    """Acepta la lista de pares {clave, valor} que emite el modelo (o un dict ya armado)."""
+    if isinstance(v, list):
+        return {
+            str(p.get("clave", "")).strip(): str(p.get("valor", ""))
+            for p in v
+            if isinstance(p, dict) and str(p.get("clave", "")).strip()
+        }
+    return v
+
+
+# Igual que con `coincidencias`: en modo strict un dict de claves libres sale VACÍO (visto en E4:
+# filtros={}). Al modelo se le anuncia una lista de pares; en Python sigue siendo dict[str, str].
+_ESQUEMA_PARES = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {"clave": {"type": "string"}, "valor": {"type": "string"}},
+        "required": ["clave", "valor"],
+        "additionalProperties": False,
+    },
+}
+Pares = Annotated[dict[str, str], BeforeValidator(_pares_a_dict), WithJsonSchema(_ESQUEMA_PARES)]
+
+
 class Plan(BaseModel):
     tipo: Literal["crear", "actualizar", "consultar", "exportar", "imposible"]
     modulo: str  # en palabras del negocio ("clientes", "pacientes"…)
-    identificacion: dict[str, str] = {}  # {"nombre": "Ana Torres"}
+    identificacion: Pares = {}  # {"nombre": "Ana Torres"}
     cambios_autorizados: list[Cambio] = []
     pregunta: Pregunta | None = None
-    filtros: dict[str, str] = {}  # fechas ya absolutas
+    filtros: Pares = {}  # fechas ya absolutas
     textos_permitidos: list[str] = []  # ÚNICOS textos que el ejecutor puede escribir
     fecha_app: str | None = None  # la fecha "Hoy" leída de la pantalla
 

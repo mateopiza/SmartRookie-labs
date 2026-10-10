@@ -188,8 +188,8 @@ Reglas:
 - Para "crear"/"actualizar": estado "terminada" solo si el valor guardado está visible y es el
   correcto; si no, "terminada" es falso -> estado "fallida" con `detalle` de qué falta. Rellena
   `escrituras` con lo que efectivamente ves persistido.
-- Para "exportar": estado "terminada" solo si el reporte generado con esos filtros está visible
-  en la lista de reportes.
+- Para "exportar": estado "terminada" si se ve la confirmación de la exportación (un aviso como
+  "Reporte generado: X" o el reporte en una lista de reportes) y los filtros del plan aplicados.
 - Para "consultar": estado "terminada" y pon en `respuesta` el valor EXACTO leído de la pantalla
   (el número o el texto). Si no puedes leerlo con certeza, "fallida".
 - Nunca inventes un número o un valor que no esté en la captura.

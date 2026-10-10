@@ -632,3 +632,35 @@ def test_terminar_sin_resultado_se_rechaza_y_se_puede_repetir():
     cli = FakeCliente(plan, acciones, Resultado(estado="terminada", respuesta="45"))
     resultado, _ = _correr_con(cli, FakeEscritorio())
     assert resultado.estado == "terminada" and resultado.respuesta == "45"
+
+
+def test_clic_en_boton_exportar_sin_compuerta_pasa_por_la_compuerta(monkeypatch):
+    llamadas = _juez_que(monkeypatch, compuerta="exportar", aprobado=False, razon="filtros no coinciden")
+    plan = _plan(tipo="exportar", modulo="pedidos", filtros={"estado": "Entregado"})
+    acciones = [Accion(tipo="click", x=176, y=166, elemento="botón Exportar")]  # sin compuerta
+    fake = FakeEscritorio()
+    _correr_con(FakeCliente(plan, acciones), fake)
+    assert llamadas == ["exportar"]
+    assert _clics(fake) == []  # el juez lo rechazó: no llegó al escritorio
+
+
+def test_boton_guardar_en_un_alta_se_trata_como_crear():
+    plan = _plan(tipo="crear")
+    a = E._compuerta_inferida(Accion(tipo="click", x=1, y=1, elemento="botón Guardar"), plan)
+    assert a.compuerta == "crear"
+    b = E._compuerta_inferida(Accion(tipo="click", x=1, y=1, elemento="menú Comercial"), plan)
+    assert b.compuerta is None
+
+
+def test_plan_acepta_filtros_e_identificacion_como_pares_del_esquema_estricto():
+    esquema = Plan.model_json_schema()["properties"]
+    assert esquema["filtros"]["type"] == "array"
+    assert esquema["identificacion"]["items"]["additionalProperties"] is False
+    plan = Plan.model_validate({
+        "tipo": "exportar", "modulo": "pedidos",
+        "filtros": [{"clave": "estado", "valor": "Entregado"}, {"clave": "desde", "valor": "2026-09-01"}],
+        "identificacion": [{"clave": "nombre", "valor": "Ana Torres"}],
+    })
+    assert plan.filtros == {"estado": "Entregado", "desde": "2026-09-01"}
+    assert plan.identificacion == {"nombre": "Ana Torres"}
+    assert Plan(tipo="crear", modulo="x", filtros={"a": "b"}).filtros == {"a": "b"}  # dict sigue valiendo

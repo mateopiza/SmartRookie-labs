@@ -38,9 +38,9 @@ async def planear(
         task_id=task_id,
     )
     log.info(
-        "plan tipo=%s modulo=%s cambios=%d textos_permitidos=%d fecha_app=%s",
+        "plan tipo=%s modulo=%s cambios=%d textos_permitidos=%d fecha_app=%s filtros=%s ident=%s",
         plan.tipo, plan.modulo, len(plan.cambios_autorizados),
-        len(plan.textos_permitidos), plan.fecha_app,
+        len(plan.textos_permitidos), plan.fecha_app, plan.filtros, list(plan.identificacion),
     )
     return plan
 

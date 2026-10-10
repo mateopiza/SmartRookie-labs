@@ -37,3 +37,10 @@ Cada entrada: fecha y hora, fase, qué cambia, por qué y si rompe algo.
   junta las páginas marcadas, el verificador las ve todas y `juez.verificar_conteo` cuenta en cada
   una y suma identificadores únicos. Se probó un campo booleano aparte (`evidencia`), pero con un
   opcional más el modo strict del proveedor dejaba de emitir `resultado` en `terminar`.
+
+## 2026-10-10 15:34 · Fase H · `Plan.filtros` e `identificacion`: esquema de pares (no rompe nada)
+
+- **Qué:** en Python siguen siendo `dict[str, str]`; el esquema JSON que ve el modelo es una lista
+  de `{clave, valor}` y un `BeforeValidator` la convierte a dict (un dict directo sigue valiendo).
+- **Por qué:** igual que `coincidencias`, en modo strict un dict de claves libres salía vacío. En
+  E4 el plan llegó con `filtros={}` y el juez rechazaba la exportación («hay otros filtros»).

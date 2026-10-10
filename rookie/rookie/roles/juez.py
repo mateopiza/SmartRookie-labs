@@ -384,8 +384,10 @@ async def _exportar(plan: Plan, png: bytes, cliente: ClienteModelos) -> Veredict
             "Se va a exportar con estos filtros:\n"
             f"{lista}\n"
             "Para cada clave, en el mismo orden, copia la clave tal cual y escribe en `valor` el "
-            "valor que muestra el filtro correspondiente en pantalla, tal como se ve. Indica en "
-            "`hay_otros_filtros` si hay algún otro filtro aplicado con valor no vacío."
+            "valor que muestra el filtro correspondiente en pantalla, tal como se ve (la clave "
+            "puede llamarse distinto en pantalla: 'desde' = 'Fecha desde'). Pon "
+            "`hay_otros_filtros` en true SOLO si un filtro que NO corresponde a ninguna clave de "
+            "la lista tiene un valor escrito o elegido; vacío o 'Todos' no cuenta."
         )
     else:
         pregunta = (
