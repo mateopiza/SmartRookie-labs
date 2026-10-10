@@ -767,3 +767,18 @@ def test_plan_invalido_dos_veces_termina_fallida_con_el_motivo():
     assert plan is None and resultado.estado == "fallida"
     assert resultado.detalle.startswith("no se pudo planear: ")
     assert "Input should be 'crear'" in resultado.detalle and "hunter2" not in resultado.detalle
+
+
+def test_prompt_prohibe_inventar_campos_exigidos_y_pide_nombrarlos():
+    from rookie.roles.prompts import EJECUTOR_SYSTEM
+    assert "CAMPOS EXIGIDOS QUE LA TAREA NO PIDE" in EJECUTOR_SYSTEM
+    assert "las opciones que se ven" in EJECUTOR_SYSTEM
+
+
+def test_fallida_del_ejecutor_por_campo_exigido_conserva_campo_y_opciones():
+    plan = _plan(tipo="actualizar", identificacion={"codigo": "PD-0012"})
+    fallida = Resultado(estado="fallida", detalle="la app exige el campo Motivo, que la tarea no da",
+                        datos_clave=["Motivo", "Cliente desistió", "Error de digitación"])
+    resultado, _ = _correr_con(FakeCliente(plan, [Accion(tipo="terminar", resultado=fallida)]),
+                               FakeEscritorio())
+    assert resultado.estado == "fallida" and resultado.datos_clave == fallida.datos_clave
