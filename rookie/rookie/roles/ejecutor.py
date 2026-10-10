@@ -113,13 +113,18 @@ _CAMPOS_IDENTIFICADORES = ("nombre", "razon", "nit", "documento", "cedula", "cod
 
 
 def _claves_identidad(plan: Plan) -> set[str]:
-    """Valores que identifican el registro de un alta: la identificación del plan o, si viene
-    vacía, los valores de los campos tipo nombre/documento/código de los cambios autorizados."""
-    claves = {_norm(v) for v in plan.identificacion.values() if _norm(v)}
+    """Valores que identifican el registro NUEVO de un alta: los campos tipo nombre/documento/
+    código de los cambios autorizados; solo si no hay ninguno, la identificación del plan (que en
+    tareas de varios pasos puede describir otro registro: visto en evaluación, el pago con el que
+    se buscaba el médico de una cita nueva cortó el alta como «ya existe»)."""
+    claves = {
+        _norm(c.valor) for c in plan.cambios_autorizados
+        if _norm(c.valor) and any(p in _norm(c.campo) for p in _CAMPOS_IDENTIFICADORES)
+    }
     if not claves:
         claves = {
-            _norm(c.valor) for c in plan.cambios_autorizados
-            if _norm(c.valor) and any(p in _norm(c.campo) for p in _CAMPOS_IDENTIFICADORES)
+            _norm(v) for k, v in plan.identificacion.items()
+            if _norm(v) and any(p in _norm(k) for p in _CAMPOS_IDENTIFICADORES)
         }
     return claves
 

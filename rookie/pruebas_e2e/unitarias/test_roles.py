@@ -923,3 +923,20 @@ def test_fila_comprobada_acepta_el_nombre_en_otro_orden(monkeypatch):
     otra = {"nombre": "Restrepo, Ana", "identificador": "P-0066", "texto": "P-0066 Restrepo, Ana"}
     acc2 = Accion(tipo="click", compuerta="identidad", coincidencias=[otra])
     assert not asyncio.run(E._fila_comprobada(acc2, plan, v, b"PNG", None))
+
+
+def test_alta_no_toma_el_registro_relacionado_por_un_duplicado():
+    plan = _plan(tipo="crear", modulo="agenda", identificacion={"referencia_pago": "TRF-550217"},
+                 cambios_autorizados=[Cambio(entidad="citas", campo="paciente", valor="Andrés Mutis"),
+                                      Cambio(entidad="citas", campo="fecha", valor="2026-10-15")])
+    pago = {"nombre": "Andrés Mutis", "identificador": "TRF-550217", "texto": "R-4205 TRF-550217"}
+    accion = Accion(tipo="click", x=1, y=1, compuerta="identidad", coincidencias=[pago])
+    permitido, _m, terminal = _aplicar_compuertas(accion, plan, _Estado())
+    assert terminal is None and permitido
+    # E1: el nombre del alta está entre los campos a crear ⇒ el duplicado se sigue detectando
+    e1 = _plan(tipo="crear", identificacion={"nombre": "Papelería Los Andes", "nit": "901234567"},
+               cambios_autorizados=[Cambio(entidad="clientes", campo="nombre", valor="Papelería Los Andes"),
+                                    Cambio(entidad="clientes", campo="nit", valor="901234567")])
+    fila = {"nombre": "Papelería Los Andes", "identificador": "CL-0141", "texto": "CL-0141"}
+    assert "ya existe" in _aplicar_compuertas(
+        Accion(tipo="click", x=1, y=1, compuerta="identidad", coincidencias=[fila]), e1, _Estado())[2].detalle
