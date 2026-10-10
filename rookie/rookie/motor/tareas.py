@@ -57,6 +57,10 @@ class Motor:
     def estado(self, task_id: str) -> EstadoTarea | None:
         return self._estados.get(task_id)
 
+    def en_curso(self) -> list[str]:
+        """Ids de las tareas que siguen en_curso (el harness comprueba que no haya ajenas)."""
+        return [tid for tid, e in self._estados.items() if e.estado == "en_curso"]
+
     # ── interno ──────────────────────────────────────────────────────────────
 
     def _lock(self, url: str) -> asyncio.Lock:

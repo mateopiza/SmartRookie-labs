@@ -308,6 +308,17 @@ class ResultadoCorrida:
         return not self.error and all(c.ok for c in self.checks)
 
 
+def tareas_ajenas(cliente: httpx.Client, cfg: Config) -> list[str] | None:
+    """Ids de tareas en_curso que ya tiene el agente (de otro cliente). None si el agente no
+    expone GET /tasks (versión anterior): no se puede comprobar."""
+    r = cliente.get(f"{cfg.agente_url}/tasks",
+                    headers={"Authorization": f"Bearer {cfg.equipo_token}"}, timeout=10.0)
+    if r.status_code in (404, 405):
+        return None
+    r.raise_for_status()
+    return [str(t) for t in r.json().get("en_curso", [])]
+
+
 def correr_prueba(cliente: httpx.Client, cfg: Config, prueba: dict[str, Any]) -> ResultadoCorrida:
     pid = prueba.get("id", "?")
     instruccion = prueba.get("instruccion", "")
@@ -423,6 +434,15 @@ def main(argv: list[str] | None = None, *, cliente: httpx.Client | None = None) 
     try:
         for rep in range(1, cfg.repeticiones + 1):
             for prueba in pruebas:
+                # interferencia: otro cliente usando el mismo agente/escritorio contamina la prueba
+                ajenas = tareas_ajenas(cli, cfg)
+                if ajenas is None:
+                    print("AVISO: el agente no expone GET /tasks; no se comprueban tareas ajenas")
+                elif ajenas:
+                    print(f"ABORTADO antes de {prueba.get('id')}: el agente tiene tareas en curso "
+                          f"ajenas: {', '.join(ajenas)}")
+                    imprimir_tabla(resultados)
+                    return 2
                 res = correr_prueba(cli, cfg, prueba)
                 nombre = res.id if cfg.repeticiones == 1 else f"{res.id}-r{rep}"
                 guardar_corrida(dir_corrida, res, nombre)

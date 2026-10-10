@@ -83,6 +83,11 @@ def crear_app(motor: Motor | None = None) -> FastAPI:
     async def crear_tarea(entrada: TareaEntrada, request: Request) -> TareaCreada:
         return TareaCreada(task_id=request.app.state.motor.crear(entrada))
 
+    @rutas.get("/tasks")
+    async def tareas_en_curso(request: Request) -> dict:
+        # aditivo al contrato: el harness aborta si hay tareas en curso ajenas en este agente
+        return {"en_curso": request.app.state.motor.en_curso()}
+
     @rutas.get("/tasks/{task_id}", response_model=EstadoTarea)
     async def estado_tarea(task_id: str, request: Request) -> EstadoTarea:
         estado = request.app.state.motor.estado(task_id)

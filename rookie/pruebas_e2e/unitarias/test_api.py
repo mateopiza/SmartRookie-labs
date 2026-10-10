@@ -103,3 +103,10 @@ async def test_body_invalido_no_repite_la_contrasena():
         r = await c.post("/tasks", json={"escritorio": BODY["escritorio"]}, headers=AUTH)
         assert r.status_code == 422
         assert CLAVE not in r.text
+
+
+async def test_get_tasks_lista_las_tareas_en_curso():
+    async with cliente() as c:
+        assert (await c.get("/tasks")).status_code == 401
+        r = await c.get("/tasks", headers=AUTH)
+        assert r.status_code == 200 and r.json() == {"en_curso": []}

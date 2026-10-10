@@ -113,7 +113,8 @@ def _cfg(reloj, **kw) -> H.Config:
     return H.Config(**base)
 
 
-def _transporte(resumen: str, estado: str = "terminada", check_pass: bool = True, lento: bool = False):
+def _transporte(resumen: str, estado: str = "terminada", check_pass: bool = True, lento: bool = False,
+                ajenas: tuple[str, ...] = ()):
     """Escritorio (health/__reset/__check) + agente (tasks) falsos."""
     estados = iter(["en_curso", estado])
 
@@ -135,6 +136,8 @@ def _transporte(resumen: str, estado: str = "terminada", check_pass: bool = True
             assert cuerpo["escritorio"]["url"] == "wss://escritorio.test/websockify"
             assert cuerpo["escritorio"]["password"] == PASSWORD
             return httpx.Response(200, json={"task_id": "t-1"})
+        if url.endswith("/tasks") and request.method == "GET":
+            return httpx.Response(200, json={"en_curso": list(ajenas)})
         if "/tasks/t-1" in url and request.method == "GET":
             return httpx.Response(200, json={"estado": next(estados), "resumen": resumen})
         return httpx.Response(404, json={"error": url})
@@ -194,3 +197,15 @@ def test_main_falla_devuelve_exit_1(tmp_path, monkeypatch):
     cli = httpx.Client(transport=_transporte("respuesta: 45 facturas"))
     code = H.main(["E3", "--sin-reset"], cliente=cli)
     assert code == 1
+
+
+def test_main_aborta_si_el_agente_tiene_tareas_ajenas_en_curso(tmp_path, monkeypatch, capsys):
+    reloj = count(0, 1)
+    cfg = _cfg(reloj)
+    monkeypatch.setattr(H, "cargar_config", lambda **kw: cfg)
+    monkeypatch.setattr(H, "DIR_CORRIDAS", tmp_path)
+    cli = httpx.Client(transport=_transporte("respuesta: 45", ajenas=("c5db6fbec34a",)))
+    code = H.main(["E3", "--sin-reset"], cliente=cli)
+    assert code == 2
+    assert "c5db6fbec34a" in capsys.readouterr().out
+    assert not list(tmp_path.rglob("E3.json"))  # no llegó a lanzar la prueba
