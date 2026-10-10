@@ -1,1 +1,1 @@
-"""API HTTP del agente (fase 1)."""
+"""API HTTP del agente."""
