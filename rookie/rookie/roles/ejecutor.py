@@ -1,1 +1,539 @@
-"""Ejecutor: bucle ejecutar -> comprobar -> ajustar (D4, §2). Máx. 3 estrategias por paso; nunca repite guardados inciertos. Fase 1."""
+"""Ejecutor: bucle ejecutar -> comprobar -> ajustar con compuertas aplicadas por CÓDIGO.
+
+Flujo (contrato §2, DISENO §2/§9):
+  Guardias(deadline - margen) -> Escritorio.conectar + primera captura -> planear ->
+  bucle [capturar | rol "ejecutor" (plan, historial, 2 últimas obs) -> Accion ->
+         compuertas de código -> (hook juez en acciones críticas) -> primitiva -> observar] ->
+  verificación final obligatoria -> cierre SIEMPRE (finally).
+
+Nada que el modelo diga salta las compuertas: lista blanca de escritura, identidad, autorización
+de guardar/crear/exportar, no-repetir guardados inciertos, límites de intentos y presupuesto.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import re
+import time
+import unicodedata
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
+
+from rookie.banco import Grabador
+from rookie.computer_use import (
+    Escritorio,
+    Guardias,
+    Observacion,
+    PlazoAgotado,
+    TareaCerrada,
+)
+from rookie.esquemas.mensajes import (
+    Accion,
+    Plan,
+    Resultado,
+    TareaEntrada,
+    Veredicto,
+)
+from rookie.modelos.cliente import ClienteModelos, ModeloNoDisponible
+from rookie.roles.orquestador import planear
+from rookie.roles.prompts import EJECUTOR_SYSTEM, VERIFICADOR_SYSTEM
+
+log = logging.getLogger("rookie.roles.ejecutor")
+
+# ── presupuesto y límites (segundos / pasos) ──────────────────────────────────
+MARGEN_S = 15.0           # Guardias cierra 15 s antes del deadline real
+UMBRAL_CIERRE_S = 40.0    # por debajo: el prompt pide "cierra con lo verificable"
+UMBRAL_FALLIDA_S = 15.0   # por debajo: fallida "plazo agotado"
+MAX_PASOS = 60            # tope duro de pasos lógicos
+MAX_SIN_CAMBIO = 6        # 6 pasos sin que cambie el hash -> fallida
+MAX_REPETICION = 3        # misma acción 3 veces sobre el mismo hash -> forzar cambio
+
+DETALLE_PLAZO = "plazo agotado"
+Criticas = {"identidad", "guardar", "crear", "exportar", "eliminar"}
+
+Conectar = Callable[[str, str, Guardias], Awaitable[Escritorio]]
+
+
+# ── normalización de texto para la lista blanca y la identidad ────────────────
+
+def _norm(s: str | None) -> str:
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"\s+", " ", s).strip().lower()
+
+
+def _texto_autorizado(texto: str | None, plan: Plan) -> bool:
+    if texto is None:
+        return False
+    permitidos = {_norm(t) for t in plan.textos_permitidos if _norm(t)}
+    return _norm(texto) in permitidos
+
+
+def _identificadores(coincidencias: list[dict]) -> list[str]:
+    out: list[str] = []
+    for fila in coincidencias:
+        partes = [f"{k}={v}" for k, v in fila.items() if str(v).strip()]
+        out.append("; ".join(partes) if partes else json.dumps(fila, ensure_ascii=False))
+    return out
+
+
+def _distingue_una(plan: Plan, coincidencias: list[dict]) -> bool:
+    ident = [_norm(v) for v in plan.identificacion.values() if _norm(v)]
+    if not ident:
+        return False
+
+    def coincide(fila: dict) -> bool:
+        texto = _norm(" ".join(str(v) for v in fila.values()))
+        return all(i in texto for i in ident)
+
+    return sum(1 for f in coincidencias if coincide(f)) == 1
+
+
+def _campo_de(accion: Accion, plan: Plan) -> str:
+    if len(plan.cambios_autorizados) == 1:
+        return _norm(plan.cambios_autorizados[0].campo)
+    return _norm(accion.elemento) or "campo"
+
+
+# ── estado mutable del bucle ──────────────────────────────────────────────────
+
+@dataclass
+class _Estado:
+    identidad_confirmada: bool = False
+    puede_crear: bool = False           # pasó identidad con 0 coincidencias (anti-duplicado)
+    creaciones: int = 0
+    exportaciones: int = 0
+    guardados_por_campo: set[str] = field(default_factory=set)
+    verificacion_pendiente: bool = False  # último guardar/crear sin confirmar
+
+
+# ── compuertas de código (en orden, antes de cada acción) ─────────────────────
+
+def _aplicar_compuertas(
+    accion: Accion, plan: Plan, estado: _Estado
+) -> tuple[bool, str | None, Resultado | None]:
+    """(permitido, motivo_rechazo_para_historial, resultado_terminal_fallida)."""
+    # b. Lista blanca de escritura
+    if accion.tipo == "escribir" and not _texto_autorizado(accion.texto, plan):
+        return (
+            False,
+            (
+                f"RECHAZADO: el texto {accion.texto!r} no está en los textos permitidos del plan; "
+                "solo puedes escribir valores autorizados."
+            ),
+            None,
+        )
+
+    # eliminar nunca se autoriza
+    if accion.compuerta == "eliminar":
+        return False, "RECHAZADO: eliminar no está autorizado en ninguna tarea.", None
+
+    # c. Compuerta de identidad
+    if accion.compuerta == "identidad":
+        coincidencias = accion.coincidencias or []
+        if len(coincidencias) == 0:
+            if plan.tipo == "actualizar":
+                return False, None, Resultado(
+                    estado="fallida",
+                    detalle="no existe un registro que coincida con la identificación",
+                )
+            estado.puede_crear = True  # crear: 0 coincidencias = no hay duplicado
+            return True, "identidad: 0 coincidencias; no hay duplicado, se puede crear.", None
+        if len(coincidencias) == 1 or _distingue_una(plan, coincidencias):
+            estado.identidad_confirmada = True
+            return True, "identidad: 1 registro distinguido; confirmada.", None
+        # > 1 y el plan no distingue exactamente uno -> ambigüedad
+        return False, None, Resultado(
+            estado="fallida",
+            detalle="identidad ambigua: más de un registro coincide con la identificación",
+            datos_clave=_identificadores(coincidencias),
+        )
+
+    # d. Autorización de guardar / crear / exportar
+    if estado.verificacion_pendiente and accion.compuerta in {"guardar", "crear"}:
+        return (
+            False,
+            (
+                "RECHAZADO: el último guardado/creación no se ha verificado. Lee el registro para "
+                "confirmar el resultado; NO repitas el guardado."
+            ),
+            None,
+        )
+
+    if accion.compuerta == "crear":
+        if plan.tipo != "crear":
+            return False, "RECHAZADO: el plan no autoriza crear.", None
+        if not estado.puede_crear:
+            return (
+                False,
+                (
+                    "RECHAZADO: antes de crear debes buscar el registro para descartar duplicados "
+                    "(compuerta identidad con 0 coincidencias)."
+                ),
+                None,
+            )
+        if estado.creaciones >= 1:
+            return False, "RECHAZADO: ya se creó un registro en esta tarea.", None
+
+    if accion.compuerta == "guardar":
+        if plan.tipo != "actualizar":
+            return False, "RECHAZADO: el plan no autoriza guardar cambios.", None
+        if not estado.identidad_confirmada:
+            return (
+                False,
+                (
+                    "RECHAZADO: antes de guardar debes confirmar la identidad del registro "
+                    "(compuerta identidad con exactamente 1 coincidencia)."
+                ),
+                None,
+            )
+        if _campo_de(accion, plan) in estado.guardados_por_campo:
+            return False, "RECHAZADO: ese campo ya se guardó; no se repite.", None
+
+    if accion.compuerta == "exportar":
+        if plan.tipo != "exportar":
+            return False, "RECHAZADO: el plan no autoriza exportar.", None
+        if estado.exportaciones >= 1:
+            return False, "RECHAZADO: ya se exportó en esta tarea.", None
+
+    return True, None, None
+
+
+def _contabilizar(accion: Accion, plan: Plan, estado: _Estado) -> None:
+    """Tras ejecutar una acción crítica, registra que ocurrió (límites de una sola vez)."""
+    if accion.compuerta == "crear":
+        estado.creaciones += 1
+        estado.verificacion_pendiente = True
+    elif accion.compuerta == "guardar":
+        estado.guardados_por_campo.add(_campo_de(accion, plan))
+        estado.verificacion_pendiente = True
+    elif accion.compuerta == "exportar":
+        estado.exportaciones += 1
+        estado.verificacion_pendiente = True
+    else:
+        estado.verificacion_pendiente = False  # una lectura/otra acción "limpia" la duda
+
+
+# ── hook del juez (import perezoso; aprueba mientras no exista) ────────────────
+
+async def _compuerta_juez(
+    accion: Accion, plan: Plan, observacion_png: bytes, cliente: ClienteModelos
+) -> Veredicto:
+    try:
+        from rookie.roles.juez import juzgar_compuerta
+    except ImportError:
+        log.info("juez no disponible; compuerta %s aprobada por defecto", accion.compuerta)
+        return Veredicto(aprobado=True, razon="juez no disponible")
+    try:
+        return await juzgar_compuerta(accion, plan, observacion_png, cliente)
+    except Exception as exc:  # noqa: BLE001 - un fallo del juez no debe tumbar la tarea
+        log.warning("juez falló (%s); se aprueba para no bloquear", type(exc).__name__)
+        return Veredicto(aprobado=True, razon=f"juez no disponible: {type(exc).__name__}")
+
+
+# ── primitivas ────────────────────────────────────────────────────────────────
+
+async def _ejecutar_primitiva(escritorio: Escritorio, accion: Accion) -> None:
+    t = accion.tipo
+    x = accion.x if accion.x is not None else 640
+    y = accion.y if accion.y is not None else 400
+    if t == "click":
+        await escritorio.click(x, y)
+    elif t == "doble_click":
+        await escritorio.click(x, y, doble=True)
+    elif t == "escribir":
+        if accion.x is not None and accion.y is not None:
+            await escritorio.click(accion.x, accion.y)
+        await escritorio.escribir(accion.texto or "", reemplazar=True)
+    elif t == "tecla":
+        await escritorio.tecla(accion.combo or "")
+    elif t == "scroll":
+        await escritorio.scroll(x, y, abajo=True)
+    elif t == "esperar":
+        await asyncio.sleep(0.4)
+
+
+# ── llamadas al modelo ────────────────────────────────────────────────────────
+
+async def _pedir_accion(
+    cliente: ClienteModelos,
+    plan: Plan,
+    historial: list[str],
+    obs_prev: Observacion | None,
+    obs_actual: Observacion,
+    cerrar_pronto: bool,
+    task_id: str,
+) -> Accion:
+    partes = [
+        "PLAN AUTORIZADO (no salgas de aquí):",
+        plan.model_dump_json(),
+        "",
+        "HISTORIAL (acciones y su resultado):",
+        "\n".join(historial[-24:]) if historial else "(sin pasos aún)",
+        "",
+    ]
+    if cerrar_pronto:
+        partes.append("AVISO: queda POCO tiempo. Cierra con lo verificable (terminar).")
+    if obs_prev is not None:
+        partes.append("Te muestro la observación ANTERIOR y la ACTUAL (la última es la vigente).")
+    else:
+        partes.append("Te muestro la observación ACTUAL (es la primera).")
+    partes.append("Decide la SIGUIENTE acción (una sola).")
+
+    imagenes: list[bytes] = []
+    if obs_prev is not None:
+        imagenes.append(obs_prev.png)
+    imagenes.append(obs_actual.png)
+
+    return await cliente.estructurado(
+        "ejecutor",
+        system=EJECUTOR_SYSTEM,
+        mensajes=[{"role": "user", "content": "\n".join(partes)}],
+        esquema=Accion,
+        imagenes=imagenes,
+        task_id=task_id,
+    )
+
+
+async def _verificar_final(
+    cliente: ClienteModelos,
+    plan: Plan,
+    propuesto: Resultado | None,
+    escritorio: Escritorio,
+    guardias: Guardias,
+    task_id: str,
+    grabador: Grabador,
+) -> Resultado:
+    try:
+        guardias.comprobar()
+        obs = await escritorio.capturar()
+    except (PlazoAgotado, TareaCerrada):
+        return propuesto or Resultado(estado="fallida", detalle="no se pudo verificar: tarea cerrada")
+
+    contexto = {
+        "plan": json.loads(plan.model_dump_json()),
+        "resultado_propuesto": json.loads(propuesto.model_dump_json()) if propuesto else None,
+    }
+    mensajes = [{
+        "role": "user",
+        "content": (
+            "PLAN y RESULTADO PROPUESTO por el ejecutor:\n"
+            f"{json.dumps(contexto, ensure_ascii=False)}\n\n"
+            "Relee SOLO la pantalla actual y confirma el resultado de forma independiente."
+        ),
+    }]
+    try:
+        ver = await cliente.estructurado(
+            "ejecutor", system=VERIFICADOR_SYSTEM, mensajes=mensajes,
+            esquema=Resultado, imagenes=[obs.png], task_id=task_id,
+        )
+    except ModeloNoDisponible:
+        return Resultado(estado="fallida", detalle="no se pudo verificar el resultado")
+
+    grabador.paso(
+        png=obs.png,
+        accion={"tipo": "verificar"},
+        meta={"razon": "verificación final", "resultado": json.loads(ver.model_dump_json())},
+    )
+
+    if plan.tipo == "consultar":
+        if ver.estado == "terminada" and ver.respuesta and ver.respuesta.strip():
+            return ver
+        return Resultado(estado="fallida", detalle=ver.detalle or "no se pudo leer la respuesta en pantalla")
+
+    if ver.estado == "terminada":
+        escrituras = ver.escrituras or (propuesto.escrituras if propuesto else [])
+        return Resultado(
+            estado="terminada",
+            escrituras=escrituras,
+            detalle=ver.detalle or (propuesto.detalle if propuesto else ""),
+        )
+    return Resultado(
+        estado="fallida",
+        detalle=ver.detalle or "no se pudo verificar el resultado en pantalla",
+        datos_clave=ver.datos_clave,
+    )
+
+
+# ── bucle principal (núcleo testeable) ────────────────────────────────────────
+
+def _firma(accion: Accion) -> tuple:
+    return (accion.tipo, accion.x, accion.y, _norm(accion.texto), _norm(accion.combo))
+
+
+async def _bucle(
+    task_id: str,
+    plan: Plan,
+    cliente: ClienteModelos,
+    escritorio: Escritorio,
+    guardias: Guardias,
+    grabador: Grabador,
+    obs0: Observacion,
+) -> Resultado:
+    historial: list[str] = []
+    estado = _Estado()
+    obs_prev: Observacion | None = None
+    obs_actual = obs0
+    repeticiones: dict[tuple, int] = {}
+    pasos_sin_cambio = 0
+    fallos_modelo = 0
+
+    for paso in range(1, MAX_PASOS + 1):
+        guardias.comprobar()  # a. plazo / cerrada
+        restante = guardias.restante_s
+        if restante < UMBRAL_FALLIDA_S:  # h. presupuesto
+            return Resultado(estado="fallida", detalle=DETALLE_PLAZO)
+        cerrar_pronto = restante < UMBRAL_CIERRE_S
+
+        try:
+            t0 = time.monotonic()
+            accion = await _pedir_accion(
+                cliente, plan, historial, obs_prev, obs_actual, cerrar_pronto, task_id
+            )
+            latencia_ms = int((time.monotonic() - t0) * 1000)
+            fallos_modelo = 0
+        except ModeloNoDisponible as exc:
+            fallos_modelo += 1
+            log.warning("paso %d: modelo no disponible (%s)", paso, type(exc).__name__)
+            if fallos_modelo >= 2:
+                return Resultado(estado="fallida", detalle="modelo no disponible")
+            historial.append(f"paso {paso}: el modelo no respondió; reintento.")
+            continue
+
+        grabador.paso(
+            png=obs_actual.png,
+            accion=json.loads(accion.model_dump_json()),
+            meta={"paso": paso, "latencia_ms": latencia_ms, "restante_s": round(restante, 1),
+                  "hash": obs_actual.hash},
+        )
+
+        # e. terminar -> verificación final obligatoria
+        if accion.tipo == "terminar":
+            propuesto = accion.resultado
+            if propuesto is None:
+                return Resultado(estado="fallida", detalle="el ejecutor terminó sin resultado")
+            if propuesto.estado == "fallida":
+                return propuesto  # el ejecutor declara que no se pudo; no se "verifica" un fallo
+            log.info("task_id=%s terminar propuesto; verificando", task_id)
+            return await _verificar_final(
+                cliente, plan, propuesto, escritorio, guardias, task_id, grabador
+            )
+
+        # g. detección de bucle sobre pantalla sin cambios
+        clave_rep = (_firma(accion), obs_actual.hash)
+        repeticiones[clave_rep] = repeticiones.get(clave_rep, 0) + 1
+        if repeticiones[clave_rep] >= MAX_REPETICION:
+            historial.append(
+                f"paso {paso}: repetiste la misma acción {accion.tipo} sobre una pantalla que no "
+                "cambió; CAMBIA de estrategia (otro elemento, teclado u otra ruta)."
+            )
+            if repeticiones[clave_rep] > MAX_REPETICION:
+                continue  # no la volvemos a ejecutar
+
+        # b-d. compuertas de código
+        permitido, motivo, terminal = _aplicar_compuertas(accion, plan, estado)
+        if terminal is not None:
+            log.info("task_id=%s compuerta terminal: %s", task_id, terminal.detalle)
+            return terminal
+        if not permitido:
+            historial.append(f"paso {paso}: {motivo}")
+            log.info("task_id=%s acción rechazada: %s", task_id, motivo)
+            continue
+        if motivo:  # nota informativa (p. ej. identidad confirmada)
+            historial.append(f"paso {paso}: {motivo}")
+
+        # d. hook del juez en acciones críticas
+        if accion.compuerta in Criticas:
+            veredicto = await _compuerta_juez(accion, plan, obs_actual.png, cliente)
+            if not veredicto.aprobado:
+                historial.append(f"paso {paso}: el juez rechazó la acción: {veredicto.razon}")
+                continue
+
+        # ejecutar la primitiva (PlazoAgotado/TareaCerrada propagan al cierre del finally)
+        await _ejecutar_primitiva(escritorio, accion)
+        _contabilizar(accion, plan, estado)
+
+        # observar el efecto
+        obs_prev = obs_actual
+        obs_actual = await escritorio.capturar()
+
+        linea = (
+            f"paso {paso}: {accion.tipo} '{accion.elemento}' "
+            f"(x={accion.x},y={accion.y}) razon={accion.razon!r} -> "
+            f"cambio_pantalla={obs_actual.cambio}"
+        )
+        historial.append(linea)
+
+        if obs_actual.cambio:
+            pasos_sin_cambio = 0
+        else:
+            pasos_sin_cambio += 1
+            historial.append(f"paso {paso}: la pantalla NO cambió tras la acción.")
+            if pasos_sin_cambio >= MAX_SIN_CAMBIO:
+                return Resultado(
+                    estado="fallida",
+                    detalle="sin avance: la pantalla no cambió tras varios intentos",
+                )
+
+    return Resultado(estado="fallida", detalle="se alcanzó el máximo de pasos sin terminar")
+
+
+# ── entrada pública (contrato §2) ─────────────────────────────────────────────
+
+async def _correr(
+    task_id: str,
+    entrada: TareaEntrada,
+    deadline: float,
+    *,
+    cliente: ClienteModelos,
+    conectar: Conectar,
+) -> tuple[Resultado, Plan | None]:
+    guardias = Guardias(task_id=task_id, deadline=deadline - MARGEN_S)
+    grabador = Grabador(task_id)
+    escritorio: Escritorio | None = None
+    plan: Plan | None = None
+    try:
+        url = entrada.escritorio.url
+        password = entrada.escritorio.password.get_secret_value()
+        escritorio = await conectar(url, password, guardias)
+        obs0 = await escritorio.capturar()
+        plan = await planear(entrada.tarea, cliente, obs0.png, task_id=task_id)
+        if plan.tipo == "imposible":
+            resultado = Resultado(
+                estado="fallida",
+                detalle="la tarea no se puede o no se debe hacer",
+            )
+        else:
+            resultado = await _bucle(task_id, plan, cliente, escritorio, guardias, grabador, obs0)
+    except (PlazoAgotado, TareaCerrada):
+        resultado = Resultado(estado="fallida", detalle=DETALLE_PLAZO)
+    except ModeloNoDisponible:
+        resultado = Resultado(estado="fallida", detalle="modelo no disponible")
+    except Exception as exc:  # noqa: BLE001 - solo la clase, nunca la traza (puede llevar secretos)
+        log.warning("task_id=%s error interno: %s", task_id, type(exc).__name__)
+        resultado = Resultado(estado="fallida", detalle=f"error interno: {type(exc).__name__}")
+    finally:
+        # f. cierre SIEMPRE: guardias.cerrar + soltar_entradas + cerrar (cerrar() hace las tres)
+        if escritorio is not None:
+            try:
+                await escritorio.cerrar()
+            except Exception as exc:  # noqa: BLE001
+                log.warning("task_id=%s fallo al cerrar: %s", task_id, type(exc).__name__)
+        else:
+            guardias.cerrar()
+
+    return resultado, plan
+
+
+async def ejecutar_tarea(task_id: str, entrada: TareaEntrada, deadline: float) -> Resultado:
+    """Punto de entrada que inyecta el Motor (rookie.roles.ejecutor.ejecutar_tarea).
+
+    Devuelve (Resultado, Plan) para que el Motor arme el resumen con el plan (extensión aditiva
+    del Ejecutor documentada en CAMBIOS-CONTRATO.md).
+    """
+    cliente = ClienteModelos()
+    return await _correr(task_id, entrada, deadline, cliente=cliente, conectar=Escritorio.conectar)
+
+
+__all__ = ["DETALLE_PLAZO", "ejecutar_tarea", "planear"]
