@@ -415,7 +415,8 @@ async def _conteo_juez(
 
 
 MAX_TEXTO_LEIDO = 40  # un dato leído (código, hora, nombre), no un párrafo
-MAX_RECIENTES = 4     # capturas en las que se busca un dato leído
+MAX_RECIENTES = 8     # capturas en las que se busca un dato leído (visto: una fecha del historial
+                      # leída 10 pasos antes de escribirla en la agenda)
 
 
 async def _texto_visible_juez(texto: str, observacion_png: bytes, cliente: ClienteModelos) -> Veredicto:

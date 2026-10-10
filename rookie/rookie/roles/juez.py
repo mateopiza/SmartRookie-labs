@@ -526,17 +526,20 @@ async def texto_visible(texto: str, png: bytes, cliente: ClienteModelos) -> Vere
     """¿`texto` aparece tal cual en la pantalla como dato de la app (un código, una hora, un
     nombre en una fila)? Permite escribir datos leídos de la app en tareas de varios pasos."""
     pregunta = (
-        f"Texto buscado: {texto!r}.\n¿Aparece EXACTAMENTE ese texto en la pantalla como dato de "
-        "la aplicación (en una fila, una ficha, una etiqueta o una opción), y NO solo dentro de un "
-        "campo de entrada que se esté llenando? En `valores` pon una entrada con clave 'texto' y "
-        "el texto tal como se ve (vacío y visible=false si no está); `evidencia` = true solo si "
-        "aparece exactamente."
+        f"Texto buscado: {texto!r}.\n¿Aparece ese dato en la pantalla como dato de la aplicación "
+        "(en una fila, una ficha, una etiqueta o una opción), y NO solo dentro de un campo de "
+        "entrada que se esté llenando? Una fecha cuenta aunque se vea en otro formato (p. ej. "
+        "2026-10-14 por 14/10/2026). En `valores` pon una entrada con clave 'texto' y el dato tal "
+        "como se ve (vacío y visible=false si no está); `evidencia` = true solo si aparece."
     )
     lectura = await _leer(cliente, _LecturaFinal, pregunta, png, "texto-visible")
     if lectura is None:
         return _no_disponible(False)
     v = lectura.valores[0] if lectura.valores else None
-    if lectura.evidencia and v is not None and v.visible and _compacto(v.valor) == _compacto(texto):
+    mismo = v is not None and (_compacto(v.valor) == _compacto(texto) or (
+        _fecha_iso(texto) is not None and _fecha_iso(texto) == _fecha_iso(v.valor)
+    ))
+    if lectura.evidencia and v is not None and v.visible and mismo:
         return Veredicto(aprobado=True, razon="el texto se ve en la pantalla")
     return Veredicto(aprobado=False, razon="el texto no se ve en la pantalla")
 

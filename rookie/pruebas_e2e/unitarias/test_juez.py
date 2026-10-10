@@ -616,3 +616,12 @@ def test_identidad_con_criterio_acepta_candidatos_enumerados_y_no_da_ambiguedad(
         {"nombre": "Nadie", "identificador": "F-9999", "texto": "F-9999"}])
     v = _run(juzgar_compuerta(otra, plan, PNG, FakeCliente(_lect_identidad(*filas))))
     assert not v.aprobado and v.datos_clave == []  # disputa, no «ambigua»
+
+
+def test_texto_visible_acepta_una_fecha_en_otro_formato():
+    lect = {"_LecturaFinal": {"valores": [{"clave": "texto", "visible": True, "valor": "2026-10-14"}],
+                              "evidencia": True, "razon": ""}}
+    assert _run(J.texto_visible("14/10/2026", PNG, FakeCliente(lect))).aprobado
+    otra = {"_LecturaFinal": {"valores": [{"clave": "texto", "visible": True, "valor": "2026-10-15"}],
+                              "evidencia": True, "razon": ""}}
+    assert not _run(J.texto_visible("14/10/2026", PNG, FakeCliente(otra))).aprobado
