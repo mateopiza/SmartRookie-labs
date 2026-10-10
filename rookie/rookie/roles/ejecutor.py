@@ -37,7 +37,7 @@ from rookie.esquemas.mensajes import (
     Veredicto,
 )
 from rookie.modelos.cliente import ClienteModelos, ModeloNoDisponible
-from rookie.roles.orquestador import planear
+from rookie.roles.orquestador import PlanNoValido, planear
 from rookie.roles.prompts import EJECUTOR_SYSTEM, VERIFICADOR_SYSTEM
 
 log = logging.getLogger("rookie.roles.ejecutor")
@@ -810,6 +810,8 @@ async def _correr(
             resultado = await _bucle(task_id, plan, cliente, escritorio, guardias, grabador, obs0)
     except (PlazoAgotado, TareaCerrada):
         resultado = Resultado(estado="fallida", detalle=DETALLE_PLAZO)
+    except PlanNoValido as exc:
+        resultado = Resultado(estado="fallida", detalle=f"no se pudo planear: {exc.motivo}")
     except ModeloNoDisponible:
         resultado = Resultado(estado="fallida", detalle="modelo no disponible")
     except Exception as exc:  # noqa: BLE001 - solo la clase, nunca la traza (puede llevar secretos)

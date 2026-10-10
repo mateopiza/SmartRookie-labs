@@ -733,3 +733,37 @@ def test_guardar_que_abre_otro_registro_alerta_y_exige_releer_la_identidad(monke
     estado = E._Estado(identidad_confirmada=False)
     guardar = Accion(tipo="click", x=9, y=9, elemento="botón Guardar", compuerta="guardar")
     assert "confirmar la identidad" in _aplicar_compuertas(guardar, plan, estado)[1]
+
+
+class _CliPlanInvalido(FakeCliente):
+    def __init__(self, plan, fallos):
+        super().__init__(plan, [])
+        self.fallos = fallos
+        self.textos: list[str] = []
+
+    async def estructurado(self, rol, *, system, mensajes, esquema, **kw):
+        if esquema is Plan:
+            self.textos.append(mensajes[-1]["content"])
+            if self.fallos > 0:
+                self.fallos -= 1
+                raise E.ModeloNoDisponible(
+                    "JSON inválido para orquestador: 1 validation error for Plan\ntipo\n  Input "
+                    "should be 'crear' [type=literal_error, input_value='hunter2', input_type=str]"
+                )
+        return await super().estructurado(rol, system=system, mensajes=mensajes, esquema=esquema, **kw)
+
+
+def test_plan_invalido_se_reintenta_una_vez_pasando_el_error():
+    cli = _CliPlanInvalido(_plan(tipo="imposible"), fallos=1)
+    resultado, plan = _correr_con(cli, FakeEscritorio())
+    assert plan is not None and len(cli.textos) == 2
+    assert "no fue válido" in cli.textos[1] and "Input should be 'crear'" in cli.textos[1]
+    assert "hunter2" not in cli.textos[1]
+
+
+def test_plan_invalido_dos_veces_termina_fallida_con_el_motivo():
+    cli = _CliPlanInvalido(_plan(), fallos=2)
+    resultado, plan = _correr_con(cli, FakeEscritorio())
+    assert plan is None and resultado.estado == "fallida"
+    assert resultado.detalle.startswith("no se pudo planear: ")
+    assert "Input should be 'crear'" in resultado.detalle and "hunter2" not in resultado.detalle
