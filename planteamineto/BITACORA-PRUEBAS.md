@@ -113,3 +113,18 @@ clic). Patrones y arreglos (17:21–17:27, sin tocar escritorios; unitarias 201 
 - `EQUIPO_TOKEN` en Dokploy ya era el token del equipo (`ftr_…`): no se tocó el entorno.
 - Despliegue manual de `de14c42` → `done`. `/health` 200 con el token, 401 sin él;
   `GET /tasks` → `{"en_curso":[]}` (solo existe en esta versión: confirma el código nuevo).
+
+### Logs de evaluación (22:39–23:30 UTC) · arreglos (los desplegados se indican)
+
+| Tarea | Patrón | Arreglo | Commit | Estado |
+|---|---|---|---|---|
+| 50f085050c3e | 25 pasos del ejecutor sin ejecutar nada (descartes silenciosos) | 8 descartes seguidos ⇒ fallida con motivo; `terminar` sin resultado ×2 ⇒ decide el verificador; descartes en el log | a725384 | desplegado |
+| 03ea76e5327a | reinicio por despliegue ⇒ 404 durante 5 min | `GET /tasks/{id}` desconocida ⇒ `fallida` «tarea perdida» | 555a4a9 | desplegado |
+| e730aa8075f4 (+4) | «anula la factura sobrante de las dos» ⇒ identidad ambigua | `filtros.criterio` explícito de la instrucción; se elige una fila; el juez la acepta si está entre las suyas | 0f08c5d | desplegado |
+| ba1c0486a05b | «C-1459» leído en otra pantalla rechazado; juez «ve 0» | dato válido si aparece en las últimas 4 capturas; disputa 1–0 resuelta si el identificador se ve | 772f0a0 | local |
+| be98ded4d23e | alta verificada rechazada por «nombre: no visible» (falsa fallida) | juez final: un campo no visible no tumba si ≥ la mitad se ve bien y ninguno erróneo | 8a22f9d | local |
+| fc94d86f1d25 | 4 disputas «juez ve 0» en búsqueda por nombre | fila comprobada por palabras sin orden | 74f6944 | local |
+
+Benchmark del orquestador (llamadas reales, captura de ejemplo): opus-5.5 7,1 s ✔; gpt-6-luna-pro
+10,9 s ✘ (factura duplicada ⇒ «imposible»); gpt-6-luna 7,2 s ✔; gpt-5.6-luna-pro 10,7 s ✔;
+sonnet-5.5 9,0 s ✔; gpt-6.1-sol 6,0 s ✔. Se mantiene Opus.
