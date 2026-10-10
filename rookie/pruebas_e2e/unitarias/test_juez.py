@@ -483,3 +483,24 @@ def test_registro_tras_guardar_aprueba_el_mismo_registro_un_listado_o_sin_juez()
         Cambio(entidad="clientes", campo="ciudad", valor="Pereira")])
     nueva = FakeCliente(_lect_registro(True, "Papelería Los Andes", "CL-0141"))
     assert _run(J.registro_tras_guardar(alta, PNG, nueva)).aprobado
+
+
+# ──────────────────────── comparación de valores ─────────────────────────────
+
+def test_igual_acepta_valor_con_etiqueta_y_rechaza_concatenado():
+    assert J._igual("305", "Consultorio 305")
+    assert J._igual("Consultorio 305", "Consultorio 305")
+    assert J._igual("3001112233", "Tel. 3001112233")
+    assert not J._igual("Calle 80 # 12-34", "Carrera 15Calle 80 # 12-34")
+    assert not J._igual("Calle 80 # 12-34", "Carrera 15 Calle 80 # 12-34")  # prefijo con números
+    assert not J._igual("305", "Consultorio 3050")
+    assert not J._igual("305", "305 Consultorio")
+
+
+def test_guardar_acepta_campo_leido_con_su_etiqueta():
+    plan = _plan(identificacion={"nombre": "Ana Torres"},
+                 cambios_autorizados=[Cambio(entidad="clientes", campo="oficina", valor="305")])
+    lect = {"_LecturaFormulario": {"valores": [{"clave": "oficina", "visible": True,
+            "valor": "Consultorio 305"}], "otros_campos_cambiados": False, "razon": ""}}
+    v = _run(juzgar_compuerta(Accion(tipo="click", compuerta="guardar"), plan, PNG, FakeCliente(lect)))
+    assert v.aprobado

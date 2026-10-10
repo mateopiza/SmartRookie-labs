@@ -154,6 +154,21 @@ def _numero(s: str | None) -> float | None:
         return None
 
 
+# Una etiqueta de una o dos palabras SIN dígitos ("Consultorio", "Tel.", "Ext:") delante del valor.
+_ETIQUETA = re.compile(r"[a-z]+(?: [a-z]+)?[:.#]?")
+
+
+def _con_etiqueta(esperado: str | None, visto: str | None) -> bool:
+    """'Consultorio 305' vale por '305': el esperado es la(s) palabra(s) completa(s) del final,
+    precedido de una etiqueta separada por espacio. 'Carrera 15Calle 80…' (concatenado, sin
+    espacio, o con un prefijo que lleva números) NO vale."""
+    e, v = _norm(esperado), _norm(visto)
+    if not e or not v.endswith(" " + e):
+        return False
+    etiqueta = v[: -len(e) - 1].strip()
+    return bool(_ETIQUETA.fullmatch(etiqueta))
+
+
 def _igual(esperado: str | None, visto: str | None, *, numerico: bool = False) -> bool:
     if not _compacto(visto):
         return False
@@ -163,7 +178,7 @@ def _igual(esperado: str | None, visto: str | None, *, numerico: bool = False) -
     if numerico:
         ne, nv = _numero(esperado), _numero(visto)
         return ne is not None and nv is not None and abs(ne - nv) < 1e-9
-    return _compacto(esperado) == _compacto(visto)
+    return _compacto(esperado) == _compacto(visto) or _con_etiqueta(esperado, visto)
 
 
 def _texto_coincide(esperado: str | None, visto: str | None) -> bool:
