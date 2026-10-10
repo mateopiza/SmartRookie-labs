@@ -6,7 +6,7 @@ cerrar la tarea (guardias.cerrar()) cualquier acción posterior lanza TareaCerra
 Reglas observadas del escritorio (README "Lo que vimos operando"):
   - tras un clic la pantalla tarda hasta ~1 s en repintar: se captura un frame estable.
   - un clic con <100 ms de hold se ignora: hold mínimo 120 ms (default 150).
-  - escribir sobre un campo con texto concatena: reemplazar=True hace Ctrl+A antes.
+  - escribir sobre un campo con texto concatena: reemplazar=True hace Ctrl+A y Delete antes.
 
 La contraseña entra por Escritorio.conectar y vive solo dentro del RFBClient; no se
 guarda en Escritorio ni aparece en repr, logs o excepciones.
@@ -182,7 +182,13 @@ class Escritorio:
     async def escribir(self, texto: str, *, reemplazar: bool = True) -> None:
         self._guardias.comprobar()
         if reemplazar:
+            # vaciar antes de escribir: seleccionar todo y BORRAR. Sin el delete, un ctrl+a que
+            # no llega a seleccionar deja el texto viejo y el nuevo se concatena (visto: una
+            # dirección concatenada que luego no se pudo borrar)
             await self.tecla("ctrl+a")
+            await asyncio.sleep(0.05)
+            await self.tecla("delete")
+            await asyncio.sleep(0.05)
         for ch in texto:
             self._guardias.comprobar()
             keysym = keysym_de_caracter(ch)

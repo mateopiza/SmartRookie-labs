@@ -310,9 +310,12 @@ def test_escribir_reemplazar_hace_ctrl_a_primero():
     assert ent[0] == rfb.key_event(True, 0xFFE3)   # ctrl down
     assert ent[1] == rfb.key_event(True, 0x61)     # 'a'
     assert ent[3] == rfb.key_event(False, 0xFFE3)  # ctrl up
+    # luego vacía el campo con Delete antes de teclear
+    assert ent[4] == rfb.key_event(True, 0xFFFF)
+    assert ent[5] == rfb.key_event(False, 0xFFFF)
     # texto "ab": 'a' down/up, 'b' down/up
-    assert rfb.key_event(True, ord("a")) in ent[4:]
-    assert rfb.key_event(True, ord("b")) in ent[4:]
+    assert ent[6:] == [rfb.key_event(True, ord("a")), rfb.key_event(False, ord("a")),
+                       rfb.key_event(True, ord("b")), rfb.key_event(False, ord("b"))]
 
 
 def test_escribir_sin_reemplazar_no_hace_ctrl_a():

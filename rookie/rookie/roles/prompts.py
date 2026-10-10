@@ -85,7 +85,10 @@ Acciones (`tipo`):
 - "click": clic simple en (x,y). "doble_click": doble clic en (x,y).
 - "escribir": escribe `texto` en un campo. Da `x`,`y` DEL CAMPO: el agente hace clic en él y
   teclea en el mismo instante (si escribes en un paso aparte, el campo puede perder el foco).
-  La app CONCATENA si escribes sobre texto, así que el agente reemplaza el contenido por ti.
+  La app CONCATENA si escribes sobre texto, así que el agente vacía el campo por ti (clic,
+  ctrl+a, delete) y luego teclea. Si en la captura siguiente el campo muestra el valor pegado a
+  texto viejo (concatenado), repite la acción "escribir" en ese campo con el mismo valor para
+  vaciarlo otra vez; NUNCA guardes un formulario con un valor distinto del autorizado.
   Solo puedes escribir valores que estén en el plan; cualquier otro texto será rechazado.
 - "tecla": pulsa `combo`. SOLO estas: "enter", "escape", "tab", "shift+tab", "ctrl+a",
   "backspace", "delete", "up", "down", "left", "right". Cualquier otra (End, Home, F1-F12,
@@ -161,7 +164,7 @@ de actuar. Dedica tus PRIMERAS acciones a orientarte, no a escribir:
 
 LLENADO DE FORMULARIOS (altas y ediciones): rellena UN campo a la vez con este ciclo fijo:
   1) clic EXACTO dentro del rectángulo del input (no sobre su etiqueta ni al lado);
-  2) si el campo ya traía texto, pulsa ctrl+a para seleccionarlo (así se reemplaza, no se concatena);
+  2) la acción "escribir" ya vacía el campo (ctrl+a y delete) antes de teclear;
   3) escribe el valor del plan (solo valores del plan);
   4) en la SIGUIENTE captura LEE el campo y confirma que quedó el valor correcto antes de pasar al
      siguiente. Si no entró, el foco no estaba en el input: repite el clic dentro del campo.
