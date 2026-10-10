@@ -51,6 +51,7 @@ MAX_SIN_CAMBIO = 6        # 6 pasos sin que cambie el hash -> fallida
 MAX_REPETICION = 3        # misma acción 3 veces sobre el mismo hash -> forzar cambio
 MAX_EVIDENCIAS = 6        # capturas-evidencia (páginas) que se pasan al verificar
 MAX_RECHAZOS_JUEZ = 3     # 3 rechazos del juez en la misma compuerta irreversible -> fallida
+MAX_DESCARTES_SEGUIDOS = 8  # 8 pasos seguidos sin ejecutar nada -> fallida (visto: 25 en bucle)
 MAX_DISPUTAS_IDENTIDAD = 4  # el juez no confirma la identidad 4 veces -> fallida (no quemar el plazo)
 
 DETALLE_PLAZO = "plazo agotado"
@@ -629,9 +630,23 @@ async def _bucle(
     rechazos_juez: dict[str, int] = {}
     evidencias: list[Observacion] = []
     ultimo_click: tuple[int, int] | None = None  # campo enfocado por el paso anterior
+    descartes = 0          # pasos seguidos en los que no se ejecutó ninguna acción
+    ejecuto = True
+    terminar_sin_resultado = 0
 
     for paso in range(1, MAX_PASOS + 1):
         guardias.comprobar()  # a. plazo / cerrada
+        # en evaluación: 25 pasos seguidos en que el modelo proponía y el código descartaba en
+        # silencio, hasta el plazo. Ahora se corta y se dice por qué.
+        descartes = 0 if ejecuto else descartes + 1
+        ejecuto = False
+        if descartes >= MAX_DESCARTES_SEGUIDOS:
+            ultimo = historial[-1] if historial else ""
+            log.info("task_id=%s %d pasos sin ejecutar nada; último: %s", task_id, descartes, ultimo[:200])
+            return Resultado(
+                estado="fallida",
+                detalle=f"sin avance: {descartes} acciones seguidas descartadas ({ultimo[:160]})",
+            )
         restante = guardias.restante_s
         if restante < UMBRAL_FALLIDA_S:  # h. presupuesto
             return Resultado(estado="fallida", detalle=DETALLE_PLAZO)
@@ -668,6 +683,15 @@ async def _bucle(
         if accion.tipo == "terminar":
             propuesto = accion.resultado
             if propuesto is None:
+                terminar_sin_resultado += 1
+                log.info("task_id=%s terminar sin resultado (%d)", task_id, terminar_sin_resultado)
+                if terminar_sin_resultado >= 2:
+                    # el modelo insiste en terminar sin dar el resultado: decide el verificador
+                    # releyendo la pantalla (antes: bucle hasta el plazo)
+                    return await _verificar_final(
+                        cliente, plan, None, escritorio, guardias, task_id, grabador,
+                        obs_terminar=obs_actual, evidencias=evidencias,
+                    )
                 historial.append(
                     f"paso {paso}: RECHAZADO: `terminar` necesita `resultado` (estado y, en una "
                     "consulta, la `respuesta` leída). Repite terminar con el resultado completo."
@@ -692,6 +716,7 @@ async def _bucle(
                 "cambió; CAMBIA de estrategia (otro elemento, teclado u otra ruta)."
             )
             if repeticiones[clave_rep] > MAX_REPETICION:
+                log.info("task_id=%s repetición bloqueada: %s '%s'", task_id, accion.tipo, accion.elemento)
                 continue  # no la volvemos a ejecutar
 
         # lista blanca ampliada: un dato corto que NO está en el plan pero se ve en la pantalla
@@ -769,6 +794,7 @@ async def _bucle(
             historial.append(
                 f"paso {paso}: RECHAZADO: un {accion.tipo} necesita las coordenadas del objetivo."
             )
+            log.info("task_id=%s %s sin coordenadas: descartado", task_id, accion.tipo)
             continue
 
         if accion.tipo == "escribir" and (accion.x is None or accion.y is None) and ultimo_click:
@@ -776,6 +802,7 @@ async def _bucle(
 
         # ejecutar la primitiva (PlazoAgotado/TareaCerrada propagan al cierre del finally)
         await _ejecutar_primitiva(escritorio, accion)
+        ejecuto = True
         ultimo_click = (accion.x, accion.y) if accion.tipo == "click" else None
         _contabilizar(accion, plan, estado)
 

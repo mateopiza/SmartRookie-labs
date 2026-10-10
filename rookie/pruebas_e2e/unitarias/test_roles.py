@@ -831,3 +831,22 @@ def test_prompts_identificacion_precisa_y_varios_registros_de_uno_en_uno():
     from rookie.roles.prompts import EJECUTOR_SYSTEM, ORQUESTADOR_SYSTEM
     assert "Datos de contexto" in ORQUESTADOR_SYSTEM and "van en `filtros`" in ORQUESTADOR_SYSTEM
     assert "VARIOS REGISTROS" in EJECUTOR_SYSTEM
+
+
+def test_acciones_descartadas_en_bucle_terminan_con_el_motivo():
+    plan = _plan(tipo="consultar", modulo="facturas")
+    acciones = [Accion(tipo="click", elemento="botón") for _ in range(20)]  # sin coordenadas
+    cli = FakeCliente(plan, acciones)
+    fake = FakeEscritorio()
+    resultado, _ = _correr_con(cli, fake)
+    assert resultado.estado == "fallida" and "sin avance" in resultado.detalle
+    assert "acciones seguidas descartadas" in resultado.detalle
+    assert len(cli.acciones) == 20 - E.MAX_DESCARTES_SEGUIDOS
+
+
+def test_terminar_sin_resultado_dos_veces_deja_decidir_al_verificador():
+    plan = _plan(tipo="consultar", modulo="facturas")
+    cli = FakeCliente(plan, [Accion(tipo="terminar"), Accion(tipo="terminar")],
+                      Resultado(estado="terminada", respuesta="45"))
+    resultado, _ = _correr_con(cli, FakeEscritorio())
+    assert resultado.estado == "terminada" and resultado.respuesta == "45"
