@@ -145,8 +145,9 @@ def _compuerta_inferida(accion: Accion, plan: Plan) -> Accion:
 
 # Teclas que el ejecutor puede pulsar. Cualquier otra (End, Home, F1–F12, alt+…, ctrl+… salvo
 # ctrl+a) se rechaza: End sacó al agente de un formulario y una tecla de función abrió DevTools.
+# Delete NO: en el escritorio con el tema nuevo inserta un carácter basura (□) en el campo.
 TECLAS_PERMITIDAS = {
-    "enter", "escape", "tab", "shift+tab", "ctrl+a", "backspace", "delete",
+    "enter", "escape", "tab", "shift+tab", "ctrl+a", "backspace",
     "up", "down", "left", "right",
 }
 _ALIAS_TECLA = {
@@ -205,8 +206,8 @@ def _aplicar_compuertas(
             False,
             (
                 f"RECHAZADO: la tecla {accion.combo!r} no está permitida (puede sacarte del "
-                "formulario o abrir otra ventana). Solo: enter, escape, tab, shift+tab, ctrl+a, "
-                "backspace, delete y flechas."
+                "formulario, abrir otra ventana o meter un carácter basura). Solo: enter, escape, "
+                "tab, shift+tab, ctrl+a, backspace y flechas; para vaciar un campo usa escribir."
             ),
             None,
         )
@@ -400,12 +401,9 @@ async def _ejecutar_primitiva(escritorio: Escritorio, accion: Accion) -> None:
     elif t == "doble_click":
         await escritorio.click(x, y, doble=True)
     elif t == "escribir":
-        if accion.x is not None and accion.y is not None:
-            # clic y tecleo en la MISMA primitiva: entre dos pasos (~4 s) la app puede quitar el
-            # foco al campo y entonces ctrl+a selecciona la página y el texto se pierde
-            await escritorio.click(accion.x, accion.y)
-            await asyncio.sleep(0.3)
-        await escritorio.escribir(accion.texto or "", reemplazar=True)
+        # selección (triple clic en el campo) y tecleo en la MISMA primitiva: entre dos pasos
+        # (~4 s) la app puede quitar el foco al campo y el texto se pierde o se concatena
+        await escritorio.escribir(accion.texto or "", reemplazar=True, x=accion.x, y=accion.y)
     elif t == "tecla":
         combo = _tecla_normalizada(accion.combo)
         if combo is not None:  # las compuertas ya rechazaron las demás; defensa en profundidad

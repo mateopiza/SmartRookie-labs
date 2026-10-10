@@ -107,7 +107,7 @@ class FakeEscritorio:
     async def escribir(self, texto, **kw):
         if self.guardias:
             self.guardias.comprobar()
-        self.acciones.append(("escribir", texto))
+        self.acciones.append(("escribir", texto, kw))
 
     async def tecla(self, combo):
         if self.guardias:
@@ -621,9 +621,9 @@ def test_escribir_sin_coordenadas_reenfoca_el_campo_del_clic_anterior():
                 Accion(tipo="escribir", texto="Ferretería Ruiz", elemento="campo Cliente")]
     fake = FakeEscritorio()
     _correr_con(FakeCliente(plan, acciones), fake)
-    tipos = [(a[0], a[1:3]) if a[0] == "click" else (a[0],) for a in fake.acciones]
-    # clic del paso, y otra vez clic justo antes de teclear
-    assert tipos[:3] == [("click", (98, 131)), ("click", (98, 131)), ("escribir",)]
+    # clic del paso, y la escritura reselecciona el mismo campo (triple clic) antes de teclear
+    assert fake.acciones[0][:3] == ("click", 98, 131)
+    assert fake.acciones[1] == ("escribir", "Ferretería Ruiz", {"reemplazar": True, "x": 98, "y": 131})
 
 
 def test_terminar_sin_resultado_se_rechaza_y_se_puede_repetir():
@@ -679,11 +679,11 @@ def test_valor_de_un_cambio_autorizado_se_puede_escribir_aunque_falte_en_textos_
 
 def test_solo_teclas_de_la_lista_blanca_llegan_al_escritorio():
     plan = _plan(tipo="consultar", modulo="facturas")
-    for prohibida in ("end", "home", "f12", "alt+f4", "ctrl+w", "ctrl+shift+i"):
+    for prohibida in ("end", "home", "f12", "alt+f4", "ctrl+w", "ctrl+shift+i", "delete"):
         permitido, motivo, terminal = _aplicar_compuertas(
             Accion(tipo="tecla", combo=prohibida), plan, _Estado())
         assert permitido is False and terminal is None and "no está permitida" in motivo
-    for ok in ("enter", "Escape", "esc", "shift+tab", "ctrl+a", "Control+A", "delete", "down"):
+    for ok in ("enter", "Escape", "esc", "shift+tab", "ctrl+a", "Control+A", "backspace", "down"):
         assert _aplicar_compuertas(Accion(tipo="tecla", combo=ok), plan, _Estado())[0] is True
     acciones = [Accion(tipo="tecla", combo="End"), Accion(tipo="tecla", combo="ESC")]
     fake = FakeEscritorio()

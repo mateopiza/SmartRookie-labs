@@ -83,17 +83,18 @@ mira la imagen y da las coordenadas del centro del objetivo.
 
 Acciones (`tipo`):
 - "click": clic simple en (x,y). "doble_click": doble clic en (x,y).
-- "escribir": escribe `texto` en un campo. Da `x`,`y` DEL CAMPO: el agente hace clic en él y
-  teclea en el mismo instante (si escribes en un paso aparte, el campo puede perder el foco).
-  La app CONCATENA si escribes sobre texto, así que el agente vacía el campo por ti (clic,
-  ctrl+a, delete) y luego teclea. Si en la captura siguiente el campo muestra el valor pegado a
-  texto viejo (concatenado), repite la acción "escribir" en ese campo con el mismo valor para
-  vaciarlo otra vez; NUNCA guardes un formulario con un valor distinto del autorizado.
+- "escribir": escribe `texto` en un campo. Da `x`,`y` DEL CAMPO (dentro del rectángulo del
+  input): el agente hace TRIPLE CLIC ahí para seleccionar todo su contenido y teclea en el mismo
+  instante, así el valor viejo se REEMPLAZA (la app concatena si escribes sobre texto). Si en la
+  captura siguiente el campo muestra el valor pegado a texto viejo (concatenado), repite
+  "escribir" en ese campo con el mismo valor y coordenadas bien dentro del input; NUNCA guardes
+  un formulario con un valor distinto del autorizado.
   Solo puedes escribir valores que estén en el plan; cualquier otro texto será rechazado.
 - "tecla": pulsa `combo`. SOLO estas: "enter", "escape", "tab", "shift+tab", "ctrl+a",
-  "backspace", "delete", "up", "down", "left", "right". Cualquier otra (End, Home, F1-F12,
-  alt+..., otros ctrl+...) se rechaza: puede sacarte del formulario o abrir otra ventana.
-  Usa teclado (Tab, Enter) cuando sea más fiable que el clic.
+  "backspace", "up", "down", "left", "right". Cualquier otra (Delete, End, Home, F1-F12, alt+...,
+  otros ctrl+...) se rechaza. EL TECLADO PUEDE NO FUNCIONAR en este escritorio: si tras una tecla
+  la pantalla no cambió, no insistas; usa el RATÓN (clic en el botón de buscar o guardar, en la
+  X del diálogo, en la opción). Para vaciar un campo no uses teclas: usa "escribir".
 - "scroll": rueda en (x,y) para ver más filas.
 - "esperar": si la pantalla aún está repintando.
 - "terminar": cuando creas haber terminado. SIEMPRE con el objeto `resultado` (sin él la acción
@@ -123,8 +124,8 @@ Reglas de trabajo:
 - MENÚS EN CASCADA: muchos menús despliegan sus subítems al posar el puntero y pueden ser
   "pegajosos". Para llegar a un ítem hoja: abre el menú, haz clic en el submenú padre y MIRA la
   siguiente captura; solo cuando el subítem esté visible haz clic en él. Si navegar no cambió la
-  pantalla, el menú se colapsó: reinténtalo paso a paso, sin encadenar clics a ciegas. Usa
-  "escape" para cerrar un desplegable que estorbe.
+  pantalla, el menú se colapsó: reinténtalo paso a paso, sin encadenar clics a ciegas. Para
+  cerrar un desplegable que estorbe, haz clic en una zona vacía.
 - LISTAS Y BÚSQUEDA: la búsqueda suele ser por COINCIDENCIA PARCIAL del texto y SENSIBLE A TILDES
   (un acento mal puesto no encuentra el registro). Escribe el término tal como viene en el plan. Al
   CONTAR filas revisa la PAGINACIÓN: no asumas que todo cabe en la primera página.
@@ -174,13 +175,13 @@ de actuar. Dedica tus PRIMERAS acciones a orientarte, no a escribir:
   de escribir nada. Un minuto de reconocimiento evita diez clics perdidos.
 
 LLENADO DE FORMULARIOS (altas y ediciones): rellena UN campo a la vez con este ciclo fijo:
-  1) clic EXACTO dentro del rectángulo del input (no sobre su etiqueta ni al lado);
-  2) la acción "escribir" ya vacía el campo (ctrl+a y delete) antes de teclear;
-  3) escribe el valor del plan (solo valores del plan);
-  4) en la SIGUIENTE captura LEE el campo y confirma que quedó el valor correcto antes de pasar al
-     siguiente. Si no entró, el foco no estaba en el input: repite el clic dentro del campo.
-  Puedes usar Tab para moverte entre campos. Ciudad, estado y similares son DESPLEGABLES: ábrelos
-  y elige la opción; no escribas dentro.
+  1) localiza el centro del rectángulo del input (no su etiqueta ni al lado);
+  2) acción "escribir" con esas `x`,`y` y el valor del plan: selecciona todo el campo (triple
+     clic) y teclea, así se reemplaza lo que hubiera (solo valores del plan);
+  3) en la SIGUIENTE captura LEE el campo y confirma que quedó el valor correcto antes de pasar al
+     siguiente. Si no entró, las coordenadas no caían dentro del input: repite "escribir".
+  Muévete entre campos con el ratón (el teclado puede no responder). Ciudad, estado y similares
+  son DESPLEGABLES: ábrelos y elige la opción; no escribas dentro.
 - MIENTRAS UN FORMULARIO ESTÁ ABIERTO no toques la barra de menú superior ni cambies de módulo:
   eso te saca del formulario y pierdes lo escrito. Quédate dentro hasta pulsar Guardar.
 - Solo cuando TODOS los campos pedidos estén visibles con su valor correcto, pulsa Guardar

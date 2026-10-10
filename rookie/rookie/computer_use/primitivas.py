@@ -6,7 +6,7 @@ cerrar la tarea (guardias.cerrar()) cualquier acción posterior lanza TareaCerra
 Reglas observadas del escritorio (README "Lo que vimos operando"):
   - tras un clic la pantalla tarda hasta ~1 s en repintar: se captura un frame estable.
   - un clic con <100 ms de hold se ignora: hold mínimo 120 ms (default 150).
-  - escribir sobre un campo con texto concatena: reemplazar=True hace Ctrl+A y Delete antes.
+  - escribir sobre un campo con texto concatena: reemplazar=True hace triple clic en el campo (y Ctrl+A) antes.
 
 La contraseña entra por Escritorio.conectar y vive solo dentro del RFBClient; no se
 guarda en Escritorio ni aparece en repr, logs o excepciones.
@@ -162,6 +162,16 @@ class Escritorio:
             "click x=%d y=%d hold=%d doble=%s derecho=%s", x, y, hold, doble, derecho
         )
 
+    async def triple_click(self, x: int, y: int) -> None:
+        """Tres clics seguidos (selecciona todo el texto de un campo)."""
+        self._guardias.comprobar()
+        self._ultima_pos = (x, y)
+        for i in range(3):
+            if i:
+                await asyncio.sleep(_ENTRE_DOBLE)
+            await self._click_una_vez(x, y, _BTN_IZQ, _HOLD_MIN_MS)
+        _log.info("triple_click x=%d y=%d", x, y)
+
     async def _click_una_vez(self, x: int, y: int, mask: int, hold_ms: int) -> None:
         await self._rfb.enviar_entrada(pointer_event(mask, x, y))
         await asyncio.sleep(hold_ms / 1000.0)
@@ -179,15 +189,20 @@ class Escritorio:
 
     # -- teclado -------------------------------------------------------------
 
-    async def escribir(self, texto: str, *, reemplazar: bool = True) -> None:
+    async def escribir(
+        self, texto: str, *, reemplazar: bool = True, x: int | None = None, y: int | None = None
+    ) -> None:
         self._guardias.comprobar()
         if reemplazar:
-            # vaciar antes de escribir: seleccionar todo y BORRAR. Sin el delete, un ctrl+a que
-            # no llega a seleccionar deja el texto viejo y el nuevo se concatena (visto: una
-            # dirección concatenada que luego no se pudo borrar)
+            # vaciar antes de escribir SIN depender de teclas especiales: en el escritorio con el
+            # tema nuevo ctrl+a, backspace y flechas no hacen nada y Delete (0xFFFF) inserta un
+            # carácter basura. El triple clic sobre el campo selecciona todo su contenido y lo
+            # tecleado lo reemplaza (sonda 10-oct 16:45). ctrl+a se mantiene: aquí es inocuo y
+            # en otros escritorios refuerza la selección.
+            if x is not None and y is not None:
+                await self.triple_click(x, y)
+                await asyncio.sleep(0.2)
             await self.tecla("ctrl+a")
-            await asyncio.sleep(0.05)
-            await self.tecla("delete")
             await asyncio.sleep(0.05)
         for ch in texto:
             self._guardias.comprobar()

@@ -306,16 +306,22 @@ def test_escribir_reemplazar_hace_ctrl_a_primero():
     esc, _ = _escritorio_fake()
     asyncio.run(esc.escribir("ab", reemplazar=True))
     ent = esc._rfb.entradas
-    # ctrl down, 'a' down, 'a' up, ctrl up  => luego 'a'/'b' del texto
+    # ctrl down, 'a' down, 'a' up, ctrl up  => luego 'a'/'b' del texto (sin Delete: mete basura)
     assert ent[0] == rfb.key_event(True, 0xFFE3)   # ctrl down
     assert ent[1] == rfb.key_event(True, 0x61)     # 'a'
     assert ent[3] == rfb.key_event(False, 0xFFE3)  # ctrl up
-    # luego vacía el campo con Delete antes de teclear
-    assert ent[4] == rfb.key_event(True, 0xFFFF)
-    assert ent[5] == rfb.key_event(False, 0xFFFF)
-    # texto "ab": 'a' down/up, 'b' down/up
-    assert ent[6:] == [rfb.key_event(True, ord("a")), rfb.key_event(False, ord("a")),
+    assert rfb.key_event(True, 0xFFFF) not in ent
+    assert ent[4:] == [rfb.key_event(True, ord("a")), rfb.key_event(False, ord("a")),
                        rfb.key_event(True, ord("b")), rfb.key_event(False, ord("b"))]
+
+
+def test_escribir_con_coordenadas_selecciona_el_campo_con_triple_clic():
+    esc, _ = _escritorio_fake()
+    asyncio.run(esc.escribir("x", reemplazar=True, x=98, y=131))
+    ent = esc._rfb.entradas
+    # 3 clics (bajar/soltar) en el campo antes de cualquier tecla
+    assert ent[:6] == [rfb.pointer_event(1, 98, 131), rfb.pointer_event(0, 98, 131)] * 3
+    assert ent[-2:] == [rfb.key_event(True, ord("x")), rfb.key_event(False, ord("x"))]
 
 
 def test_escribir_sin_reemplazar_no_hace_ctrl_a():
