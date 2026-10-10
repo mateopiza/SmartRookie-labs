@@ -7,19 +7,16 @@ dependencies = [
     "fastapi",
     "uvicorn",
     "websockets",
-    "numpy",
     "pillow",
-    "opencv-python-headless",
-    "rapidocr-onnxruntime",
-    "imagehash",
+    "pycryptodome",
     "pydantic",
-    "instructor",
     "httpx",
     "pyyaml",
+    "python-dotenv",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio", "ruff"]
+dev = ["pytest", "pytest-asyncio", "respx", "ruff"]
 
 [build-system]
 requires = ["hatchling"]
