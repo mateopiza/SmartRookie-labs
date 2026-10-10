@@ -335,6 +335,17 @@ async def _identidad(accion: Accion, plan: Plan, png: bytes, cliente: ClienteMod
         if not any(_misma_fila(e, f) for e in del_ejecutor)
     ]
 
+    criterio = next((v for k, v in plan.filtros.items() if "criterio" in _norm(k) and _norm(v)), None)
+    if (
+        criterio
+        and len(del_ejecutor) == 1
+        and lectura.filas
+        and any(_misma_fila(del_ejecutor[0], f) for f in lectura.filas)
+    ):
+        return Veredicto(
+            aprobado=True,
+            razon=f"registro elegido por el criterio de la tarea entre {len(lectura.filas)} candidato(s)",
+        )
     if lectura.cantidad != len(lectura.filas):
         razon = (
             f"lectura inconsistente del juez: dice {lectura.cantidad} filas y lista "

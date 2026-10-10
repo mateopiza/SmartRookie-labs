@@ -542,3 +542,19 @@ def test_texto_visible_exige_evidencia_y_el_mismo_texto():
     assert not _run(J.texto_visible("08:40", PNG, FakeCliente(lect("08:45")))).aprobado
     assert not _run(J.texto_visible("08:40", PNG, FakeCliente(lect("08:40", evidencia=False)))).aprobado
     assert not _run(J.texto_visible("08:40", PNG, FakeCliente(fallos=9))).aprobado
+
+
+def test_identidad_con_criterio_acepta_la_fila_elegida_entre_las_que_ve_el_juez():
+    cli = FakeCliente(_lect_identidad(
+        ("52345678", "CL-0007 Ana Torres 52345678 Bogotá"),
+        ("1019876543", "CL-0019 Ana Torres 1019876543 Cali"),
+    ))
+    acc = Accion(tipo="click", compuerta="identidad", coincidencias=[ANA_2])
+    plan = _plan(identificacion={"nombre": "Ana Torres"}, filtros={"criterio": "la de Cali"})
+    assert _run(juzgar_compuerta(acc, plan, PNG, cli)).aprobado
+    sin = _plan(identificacion={"nombre": "Ana Torres"})
+    cli2 = FakeCliente(_lect_identidad(
+        ("52345678", "CL-0007 Ana Torres 52345678 Bogotá"),
+        ("1019876543", "CL-0019 Ana Torres 1019876543 Cali"),
+    ))
+    assert not _run(juzgar_compuerta(acc, sin, PNG, cli2)).aprobado  # E5 sigue fallando

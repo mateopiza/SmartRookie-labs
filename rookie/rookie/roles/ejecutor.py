@@ -173,6 +173,15 @@ def _tecla_normalizada(combo: str | None) -> str | None:
     return canonico if canonico in TECLAS_PERMITIDAS else None
 
 
+def _criterio(plan: Plan) -> str | None:
+    """Criterio EXPLÍCITO de la instrucción para elegir entre varios registros (el duplicado,
+    el más reciente, el primer cupo libre…), que el orquestador pone en filtros['criterio']."""
+    for k, v in plan.filtros.items():
+        if "criterio" in _norm(k) and _norm(v):
+            return v
+    return None
+
+
 def _campo_de(accion: Accion, plan: Plan) -> str:
     if len(plan.cambios_autorizados) == 1:
         return _norm(plan.cambios_autorizados[0].campo)
@@ -265,6 +274,18 @@ def _aplicar_compuertas(
         if len(coincidencias) == 1 or _distingue_una(plan, coincidencias):
             estado.identidad_confirmada = True
             return True, "identidad: 1 registro distinguido; confirmada.", None
+        criterio = _criterio(plan)
+        if criterio:
+            # la tarea dice cómo elegir entre varios (visto en evaluación: «anular la factura
+            # sobrante de las dos»); no es ambigüedad: se elige una y se vuelve a marcar
+            return (
+                False,
+                (
+                    f"RECHAZADO: hay {len(coincidencias)} candidatos. Aplica el criterio del plan "
+                    f"({criterio}) y marca otra vez compuerta identidad con SOLO la fila elegida."
+                ),
+                None,
+            )
         # > 1 y el plan no distingue exactamente uno -> ambigüedad
         return False, None, Resultado(
             estado="fallida",

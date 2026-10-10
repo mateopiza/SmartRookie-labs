@@ -42,6 +42,10 @@ Tu trabajo:
    - "hoy" = fecha_app; "ayer" = fecha_app - 1 día; "el sábado" = el sábado más reciente <= hoy.
    - "septiembre de 2026" -> desde "2026-09-01" hasta "2026-09-30".
    - un mes -> desde su día 1 hasta su último día. Formato ISO "AAAA-MM-DD".
+   - Si la INSTRUCCIÓN dice cómo elegir entre varios registros parecidos (el duplicado o
+     sobrante, el más reciente, el primero libre, el de mayor valor…), añade a `filtros` la clave
+     "criterio" con ese criterio en palabras de la instrucción. NUNCA lo inventes: si la
+     instrucción no lo dice, no hay criterio (varios registros iguales = ambigüedad).
 7. `fecha_app`: la fecha "Hoy" que leíste en la captura, en ISO.
 8. `textos_permitidos`: TODOS los literales que el ejecutor podrá escribir con el teclado:
    los valores de cambios_autorizados, los valores de identificacion, y los términos de
@@ -164,6 +168,9 @@ Reglas de trabajo:
 - "hoy" es la fecha que muestra la app.
 - Si el presupuesto de tiempo se acaba (el historial lo avisará), cierra con lo verificable.
 - Para localizar un registro primero navega a su módulo y búscalo; enumera coincidencias.
+- CRITERIO DE ELECCIÓN: si el plan trae filtros["criterio"] y ves varios candidatos, enuméralos
+  una vez (compuerta identidad con todos), luego aplica el criterio y marca otra vez compuerta
+  "identidad" con SOLO la fila elegida antes de editarla.
 - VARIOS REGISTROS: si la tarea cambia varios registros (p. ej. todas las órdenes de un día),
   trabájalos de UNO en UNO: antes de editar cada uno, marca compuerta "identidad" con esa sola
   fila en `coincidencias`, edítalo, guárdalo y pasa al siguiente.

@@ -850,3 +850,21 @@ def test_terminar_sin_resultado_dos_veces_deja_decidir_al_verificador():
                       Resultado(estado="terminada", respuesta="45"))
     resultado, _ = _correr_con(cli, FakeEscritorio())
     assert resultado.estado == "terminada" and resultado.respuesta == "45"
+
+
+def test_varios_candidatos_con_criterio_de_la_instruccion_no_es_ambiguedad():
+    plan = _plan(tipo="actualizar", identificacion={"paciente": "Ana Torres", "concepto": "Control"},
+                 filtros={"criterio": "anular solo la factura duplicada"})
+    filas = [{"nombre": "Ana Torres", "identificador": "F-2301", "texto": "F-2301 Control"},
+             {"nombre": "Ana Torres", "identificador": "F-2302", "texto": "F-2302 Control"}]
+    estado = _Estado()
+    permitido, motivo, terminal = _aplicar_compuertas(
+        Accion(tipo="click", x=1, y=1, compuerta="identidad", coincidencias=filas), plan, estado)
+    assert not permitido and terminal is None and "criterio" in motivo
+    permitido, _m, terminal = _aplicar_compuertas(
+        Accion(tipo="click", x=1, y=1, compuerta="identidad", coincidencias=filas[1:]), plan, estado)
+    assert permitido and estado.identidad_confirmada
+    # sin criterio, los homónimos siguen siendo ambigüedad (E5)
+    sin = _plan(tipo="actualizar", identificacion={"paciente": "Ana Torres"})
+    assert "ambigua" in _aplicar_compuertas(
+        Accion(tipo="click", x=1, y=1, compuerta="identidad", coincidencias=filas), sin, _Estado())[2].detalle
