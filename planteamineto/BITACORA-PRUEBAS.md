@@ -92,3 +92,16 @@ colores ni coordenadas fijas: el ejecutor lee la captura con el modelo de visió
 | 16:35–16:41 | sonda VNC (agente parado) | — | — | — | En el escritorio con el tema nuevo `ctrl+a`, `BackSpace`, flechas y `Tab` **no tienen efecto** (sostenidas 150 ms tampoco) y `Delete` (0xFFFF) **inserta un carácter basura**: el arreglo A2 (ctrl+a + delete) empeoró el síntoma. El ratón sí: triple clic selecciona todo el input y lo tecleado lo reemplaza («Calle vieja 12 # 3» → «Papelería Los Andes», «Ramírez» con tilde) | `escribir(x, y)` = triple clic en el campo + ctrl+a (inocuo aquí) + texto; `Delete` fuera de la lista blanca; prompt: el teclado puede no responder, usar el ratón (5901a05) |
 | 16:41 | **Corrida completa 2** (tema nuevo, tras 5901a05) | — | 123/103/103/93/53 | ✔ **5/5** (E1 terminada, E2 terminada, E3 `respuesta` ✔, E4 terminada, E5 fallida con las claves) | — | — |
 | 16:50 | Corrida 3 | — | — | cortada a los ~4 s de E1 (agente local detenido) | Por indicación del usuario: las pruebas las hace otra entidad. Push de `main` hecho (79aadee) | — |
+
+### Logs de evaluación (agente desplegado, 21:51–22:19 UTC, app oculta de agenda/facturación)
+
+El desplegado corría código anterior a la Fase H2 (`click` + `ctrl+a` + `escribir`, sin triple
+clic). Patrones y arreglos (17:21–17:27, sin tocar escritorios; unitarias 201 ✔):
+
+| Patrón en los logs | Categoría | Arreglo | Commit |
+|---|---|---|---|
+| Toda captura tras «escribir» agotaba 7 000 ms (cursor parpadeando ⇒ nunca «quieta») | tiempo | Un cambio en una caja ≤ 6×40 px no cuenta como movimiento | e2f7f2e |
+| «identidad ambigua» con 1 fila del ejecutor y 1 distinta del juez (ids juntados ⇒ 2); bucles «el juez ve 0» hasta el plazo; cédula con puntos | compuerta | Solo hay ambigüedad si alguno ve ≥ 2; el juez no descarta una fila por datos que no muestra; comparación compacta; 4 disputas ⇒ fallida | b3b41e1 |
+| Juez de guardar: «estado: en pantalla 'Programada'», «no visible» en tareas de varios pasos ⇒ 3 rechazos | compuerta | Bloquea valores parecidos pero distintos (errata/concatenado); ajenos o no visibles = otro paso; exige ≥ 1 correcto | 4b2a77e |
+| Lista blanca rechazó «P-0066» y «08:40» (datos leídos de la app) | compuerta | Dato ≤ 40 caracteres que el juez ve tal cual en pantalla ⇒ autorizado (real: 4,0 s / 2,7 s) | c668aa5 |
+| Identificaciones con 4–6 claves (medio de pago, modificado_por…) | decisión | Prompt: 1–3 datos que distinguen; contexto a `filtros`; varios registros de uno en uno (real: ident={fecha, profesional}) | 18a5a8e |
