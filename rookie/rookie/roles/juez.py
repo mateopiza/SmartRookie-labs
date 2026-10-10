@@ -4,7 +4,7 @@ El modelo solo LEE la captura y contesta una pregunta cerrada; la decisión la t
 comparando lo leído con lo que propuso el ejecutor (INFORME-estado §5).
 
 Reglas de código:
-- Cada lectura: timeout 20 s y 1 reintento. Si el modelo no responde, la política es por tipo:
+- Cada lectura: timeout 30 s y 1 reintento. Si el modelo no responde, la política es por tipo:
   identidad → aprobado (manda el conteo del ejecutor); guardar / crear / exportar / final →
   rechazado con razón "juez no disponible" (ante la duda, fallida).
 - `datos_clave` solo lleva valores leídos de la captura (por el juez o, en identidad, por el
@@ -30,7 +30,7 @@ from rookie.modelos.cliente import ClienteModelos
 log = logging.getLogger("rookie.roles.juez")
 
 ROL = "juez"
-TIMEOUT_S = 20.0
+TIMEOUT_S = 30.0  # lecturas medidas de 12–15 s en pantallas cargadas; 20 s cortaba algunas
 INTENTOS = 2  # 1 llamada + 1 reintento
 NO_DISPONIBLE = "juez no disponible"
 

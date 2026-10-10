@@ -75,7 +75,7 @@ def test_identidad_coincide_aprueba():
     assert v.aprobado and v.datos_clave == []
     llamada = cli.llamadas[0]
     assert llamada["rol"] == "juez" and llamada["imagenes"] == [PNG]
-    assert "Ana Torres" in llamada["texto"] and llamada["timeout_s"] == 20.0
+    assert "Ana Torres" in llamada["texto"] and llamada["timeout_s"] == 30.0
 
 
 def test_identidad_ejecutor_ve_una_juez_dos_rechaza_con_union():
@@ -262,6 +262,13 @@ def test_timeout_cuenta_como_no_disponible(monkeypatch):
     v = _run(juzgar_compuerta(Accion(tipo="click", compuerta="guardar"), PLAN_DIR, PNG, cli))
     assert not v.aprobado and v.razon == NO_DISPONIBLE
     assert len(cli.llamadas) == 2 and time.perf_counter() - inicio < 2
+
+
+def test_timeout_del_juez_es_30_s_y_se_pasa_al_cliente():
+    assert J.TIMEOUT_S == 30.0
+    cli = FakeCliente(_lect_registro(False))
+    _run(J.registro_tras_guardar(_plan(identificacion={"nombre": "Ana Torres"}), PNG, cli))
+    assert cli.llamadas[0]["timeout_s"] == 30.0
 
 
 # ──────────────────────────── veredicto final ────────────────────────────────
