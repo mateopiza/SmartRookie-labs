@@ -39,6 +39,11 @@ _ESPERA_FRAME = 0.150         # entre capturas para detectar frame estable
 _VENTANA_ESTABLE = 0.6        # tras el último cambio, tanto tiempo sin cambios = frame estable
 _MAX_SIN_CAMBIO = 4.5         # si nada cambia en este tiempo, la acción no tuvo efecto visible
 _MAX_ESTABLE = 7.0            # tope absoluto de espera
+# Un cambio dentro de una caja así de pequeña es el cursor de texto parpadeando en el campo con
+# foco, no la app repintando. En evaluación cada captura tras «escribir» agotaba los 7 s
+# esperando quietud por culpa del parpadeo.
+_CURSOR_MAX_ANCHO = 6
+_CURSOR_MAX_ALTO = 40
 _HOLD_MIN_MS = 120            # clic por debajo de esto se ignora
 _HOLD_DEFAULT_MS = 150
 _ENTRE_DOBLE = 0.080         # entre los dos clics de un doble clic
@@ -65,6 +70,29 @@ class _Mods:
     """Modificadores que podrían haber quedado presionados (para soltar_entradas)."""
 
     activos: set[int] = field(default_factory=set)
+
+
+def cambio_minimo(a: bytes, b: bytes, ancho: int) -> bool:
+    """¿Los dos frames (BGRX, `ancho` píxeles por fila) difieren solo dentro de una caja del
+    tamaño de un cursor de texto? Frames iguales también cuentan como mínimo."""
+    if len(a) != len(b):
+        return False
+    fila = ancho * 4
+    filas = [i for i in range(len(a) // fila) if a[i * fila:(i + 1) * fila] != b[i * fila:(i + 1) * fila]]
+    if not filas:
+        return True
+    if filas[-1] - filas[0] + 1 > _CURSOR_MAX_ALTO:
+        return False
+    x0, x1 = ancho, -1
+    for i in filas:
+        fa, fb = a[i * fila:(i + 1) * fila], b[i * fila:(i + 1) * fila]
+        for x in range(ancho):
+            if fa[x * 4:x * 4 + 3] != fb[x * 4:x * 4 + 3]:
+                x0 = min(x0, x)
+                x1 = max(x1, x)
+        if x1 - x0 + 1 > _CURSOR_MAX_ANCHO:
+            return False
+    return True
 
 
 class Escritorio:
@@ -101,6 +129,7 @@ class Escritorio:
         referencia = self._ultimo_hash if esperar_cambio else None
         _, h_prev = await self._rfb.capturar_frame()
         png = self._rfb.png_actual()
+        fb_prev = self._fb()
         h_final = h_prev
         cambio_visto = referencia is None or h_prev != referencia
         ultimo_cambio = time.monotonic()
@@ -112,8 +141,13 @@ class Escritorio:
             _, h_cur = await self._rfb.capturar_frame()
             ahora = time.monotonic()
             if h_cur != h_prev:
-                ultimo_cambio = ahora
-                h_prev = h_cur
+                fb_cur = self._fb()
+                # el parpadeo del cursor no es "la pantalla se mueve"
+                if fb_prev is None or fb_cur is None or not cambio_minimo(
+                    fb_prev, fb_cur, getattr(self._rfb, "width", 1280)
+                ):
+                    ultimo_cambio = ahora
+                h_prev, fb_prev = h_cur, fb_cur
             if referencia is not None and h_cur != referencia:
                 cambio_visto = True
             png = self._rfb.png_actual()
@@ -138,6 +172,10 @@ class Escritorio:
             obs.id, obs.estable_tras_ms, obs.hash, obs.cambio,
         )
         return obs
+
+    def _fb(self) -> bytes | None:
+        leer = getattr(self._rfb, "fb_bytes", None)
+        return leer() if leer is not None else None
 
     # -- puntero -------------------------------------------------------------
 

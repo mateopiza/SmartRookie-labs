@@ -403,3 +403,24 @@ def test_capturar_sin_esperar_cambio_solo_espera_quietud():
     esc._rfb._hashes = ["igual"] * 40
     obs = asyncio.run(esc.capturar(esperar_cambio=False))
     assert obs.estable_tras_ms < 1500
+
+
+def test_cambio_minimo_ignora_el_cursor_y_no_un_repintado():
+    from rookie.computer_use.primitivas import cambio_minimo
+    ancho, alto = 100, 60
+    base = bytearray(ancho * alto * 4)
+    cursor = bytearray(base)
+    for y in range(10, 30):  # cursor de 2 px de ancho y 20 de alto
+        for x in (50, 51):
+            cursor[(y * ancho + x) * 4] = 255
+    assert cambio_minimo(bytes(base), bytes(base), ancho)
+    assert cambio_minimo(bytes(base), bytes(cursor), ancho)
+    repinta = bytearray(base)
+    for y in range(5, 50):
+        for x in range(10, 90):
+            repinta[(y * ancho + x) * 4] = 255
+    assert not cambio_minimo(bytes(base), bytes(repinta), ancho)
+    texto = bytearray(base)  # una palabra nueva: ancha aunque baja
+    for x in range(20, 60):
+        texto[(15 * ancho + x) * 4] = 255
+    assert not cambio_minimo(bytes(base), bytes(texto), ancho)

@@ -384,6 +384,11 @@ class RFBClient:
         assert self._fb is not None
         return hashlib.md5(bytes(self._fb)).hexdigest()
 
+    def fb_bytes(self) -> bytes:
+        """Copia de los píxeles actuales (BGRX), para comparar dos frames."""
+        assert self._fb is not None
+        return bytes(self._fb)
+
     def png_actual(self) -> bytes:
         assert self._fb is not None
         # El framebuffer está en BGRX; rawmode "BGRX" descarta el byte X.
