@@ -51,6 +51,7 @@ MAX_SIN_CAMBIO = 6        # 6 pasos sin que cambie el hash -> fallida
 MAX_REPETICION = 3        # misma acción 3 veces sobre el mismo hash -> forzar cambio
 MAX_EVIDENCIAS = 6        # capturas-evidencia (páginas) que se pasan al verificar
 MAX_RECHAZOS_JUEZ = 3     # 3 rechazos del juez en la misma compuerta irreversible -> fallida
+MAX_DISPUTAS_IDENTIDAD = 4  # el juez no confirma la identidad 4 veces -> fallida (no quemar el plazo)
 
 DETALLE_PLAZO = "plazo agotado"
 Criticas = {"identidad", "guardar", "crear", "exportar", "eliminar"}
@@ -89,13 +90,18 @@ def _identificadores(coincidencias: list[dict]) -> list[str]:
     return out
 
 
+def _compacto(s: str | None) -> str:
+    return re.sub(r"[^a-z0-9]", "", _norm(s))
+
+
 def _distingue_una(plan: Plan, coincidencias: list[dict]) -> bool:
-    ident = [_norm(v) for v in plan.identificacion.values() if _norm(v)]
+    # forma compacta: una cédula "1.019.876.543" en pantalla es la "1019876543" del plan
+    ident = [_compacto(v) for v in plan.identificacion.values() if _compacto(v)]
     if not ident:
         return False
 
     def coincide(fila: dict) -> bool:
-        texto = _norm(" ".join(str(v) for v in fila.values()))
+        texto = _compacto(" ".join(str(v) for v in fila.values()))
         return all(i in texto for i in ident)
 
     return sum(1 for f in coincidencias if coincide(f)) == 1
@@ -699,6 +705,14 @@ async def _bucle(
                             estado="fallida",
                             detalle=veredicto.razon or "identidad ambigua: el juez no la confirmó",
                             datos_clave=ids,
+                        )
+                    n = rechazos_juez.get("identidad", 0) + 1
+                    rechazos_juez["identidad"] = n
+                    if n >= MAX_DISPUTAS_IDENTIDAD:
+                        return Resultado(
+                            estado="fallida",
+                            detalle=f"no se pudo confirmar el registro: {veredicto.razon}",
+                            datos_clave=_identificadores(accion.coincidencias or []),
                         )
                 if accion.compuerta != "identidad":
                     n = rechazos_juez.get(accion.compuerta, 0) + 1

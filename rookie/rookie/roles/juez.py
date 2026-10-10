@@ -302,6 +302,10 @@ async def _identidad(accion: Accion, plan: Plan, png: bytes, cliente: ClienteMod
     pregunta = (
         f"Identificación buscada: {_describir(plan.identificacion)}.\n"
         "¿Cuántas filas o registros visibles en la pantalla coinciden con esa identificación? "
+        "Una fila coincide si los datos de la identificación que SE VEN en ella son iguales; un "
+        "dato de la identificación que la fila no muestra (p. ej. quién o cuándo la modificó) no "
+        "la descarta; solo la descarta un dato visible distinto. Si la pantalla muestra la ficha "
+        "o el detalle de un único registro, ese registro cuenta como una fila. "
         "Lista cada uno: en `identificador` el dato que lo distingue de los demás (código, "
         "documento, número o id) y en `texto` la fila completa, ambos tal como se ven. "
         "`cantidad` es el número de filas listadas; si no hay ninguna, 0 y lista vacía."
@@ -334,7 +338,13 @@ async def _identidad(accion: Accion, plan: Plan, png: bytes, cliente: ClienteMod
             aprobado=True,
             razon=f"identidad confirmada: {len(lectura.filas)} coincidencia(s), las mismas",
         )
-    return Veredicto(aprobado=False, razon=razon, datos_clave=_dedup(ids_ejecutor + ids_juez))
+    # Solo hay ambigüedad (y datos para una fallida) si alguno de los dos ve 2 o más registros.
+    # Un 1 contra 1 distinto o un 1 contra 0 es una disputa: el ejecutor vuelve a leer (en
+    # evaluación, juntar los ids de un 1 contra 1 terminó tareas como «ambiguas» sin serlo).
+    # (0 del ejecutor contra ≥1 del juez antes de un alta es un posible duplicado: se nombra)
+    if max(len(lectura.filas), len(del_ejecutor)) >= 2 or (not del_ejecutor and lectura.filas):
+        return Veredicto(aprobado=False, razon=razon, datos_clave=_dedup(ids_ejecutor + ids_juez))
+    return Veredicto(aprobado=False, razon=razon)
 
 
 async def _guardar(plan: Plan, png: bytes, cliente: ClienteModelos) -> Veredicto:

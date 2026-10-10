@@ -782,3 +782,25 @@ def test_fallida_del_ejecutor_por_campo_exigido_conserva_campo_y_opciones():
     resultado, _ = _correr_con(FakeCliente(plan, [Accion(tipo="terminar", resultado=fallida)]),
                                FakeEscritorio())
     assert resultado.estado == "fallida" and resultado.datos_clave == fallida.datos_clave
+
+
+def test_identidad_distingue_documento_con_puntos():
+    plan = _plan(tipo="actualizar", identificacion={"nombre": "Ana Torres", "cedula": "1019876543"})
+    filas = [{"nombre": "Ana Torres", "identificador": "1.019.876.543", "texto": "CL-0019"},
+             {"nombre": "Ana Torres", "identificador": "52.345.678", "texto": "CL-0007"}]
+    accion = Accion(tipo="click", x=1, y=1, compuerta="identidad", coincidencias=filas)
+    estado = _Estado()
+    permitido, _m, terminal = _aplicar_compuertas(accion, plan, estado)
+    assert permitido and terminal is None and estado.identidad_confirmada
+
+
+def test_disputas_de_identidad_repetidas_terminan_sin_quemar_el_plazo(monkeypatch):
+    _juez_que(monkeypatch, compuerta="identidad", aprobado=False, razon="identidad en disputa")
+    plan = _plan(tipo="actualizar", identificacion={"nombre": "Ana Torres"})
+    fila = {"nombre": "Ana Torres", "identificador": "CL-0007", "texto": "CL-0007"}
+    acciones = [Accion(tipo="click", x=1, y=i, compuerta="identidad", coincidencias=[fila])
+                for i in range(1, 10)]
+    cli = FakeCliente(plan, acciones)
+    resultado, _ = _correr_con(cli, FakeEscritorio())
+    assert resultado.estado == "fallida" and "no se pudo confirmar el registro" in resultado.detalle
+    assert len(cli.acciones) == 5  # paró a la 4.ª disputa

@@ -101,12 +101,19 @@ def test_identidad_union_no_repite_la_fila_comun_con_otro_identificador():
     assert not v.aprobado and v.datos_clave == ["52345678", "CL-0019"]
 
 
-def test_identidad_mismo_conteo_otro_registro_rechaza_con_union():
+def test_identidad_uno_contra_uno_distinto_es_disputa_sin_datos_de_fallida():
     cli = FakeCliente(_lect_identidad(("CL-0019", "CL-0019 Ana Torres 1019876543 Cali")))
     acc = Accion(tipo="click", compuerta="identidad", coincidencias=[ANA_1])
     v = _run(juzgar_compuerta(acc, _plan(identificacion={"nombre": "Ana Torres"}), PNG, cli))
-    assert not v.aprobado
-    assert v.datos_clave == ["52345678", "CL-0019"]
+    assert not v.aprobado and "disputa" in v.razon
+    assert v.datos_clave == []  # el ejecutor no la convierte en «ambigua»
+
+
+def test_identidad_pregunta_no_descarta_por_datos_que_la_fila_no_muestra():
+    cli = FakeCliente(_lect_identidad(("CL-0007", "CL-0007 Ana Torres 52345678 Bogotá")))
+    acc = Accion(tipo="click", compuerta="identidad", coincidencias=[ANA_1])
+    _run(juzgar_compuerta(acc, _plan(identificacion={"nombre": "Ana Torres"}), PNG, cli))
+    assert "no la descarta" in cli.llamadas[0]["texto"]
 
 
 def test_identidad_dos_y_dos_homonimos_emparejan():
