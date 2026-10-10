@@ -37,6 +37,7 @@ def juez_aprueba(monkeypatch):
         return Veredicto(aprobado=True, razon="prueba")
     monkeypatch.setattr(E, "_compuerta_juez", aprobar)
     monkeypatch.setattr(E, "_veredicto_final_juez", aprobar)
+    monkeypatch.setattr(E, "_registro_juez", aprobar)
 
 
 def _juez_que(monkeypatch, *, compuerta, aprobado, razon="", datos_clave=()):
@@ -701,3 +702,34 @@ def test_clic_en_cerrar_un_aviso_no_pasa_por_compuertas_criticas():
     for elemento in ("botón Entendido", "botón Aceptar del aviso de novedades", "botón Cerrar"):
         a = E._compuerta_inferida(Accion(tipo="click", x=1, y=1, elemento=elemento), plan)
         assert a.compuerta is None
+
+
+def test_guardar_que_abre_otro_registro_alerta_y_exige_releer_la_identidad(monkeypatch):
+    async def otro_registro(plan, png, cliente):
+        return Veredicto(aprobado=False, razon="la pantalla muestra otro registro: CL-0046")
+    monkeypatch.setattr(E, "_registro_juez", otro_registro)
+    plan = _plan(tipo="actualizar", identificacion={"nombre": "Distribuciones El Faro"},
+                 cambios_autorizados=[Cambio(entidad="clientes", campo="telefono", valor="3001112233")])
+    fila = {"nombre": "Distribuciones El Faro", "identificador": "CL-0007", "texto": "CL-0007"}
+    acciones = [
+        Accion(tipo="click", x=1, y=1, elemento="fila", compuerta="identidad", coincidencias=[fila]),
+        Accion(tipo="click", x=9, y=9, elemento="botón Guardar", compuerta="guardar"),
+        Accion(tipo="click", x=9, y=9, elemento="botón Guardar", compuerta="guardar"),
+    ]
+    fake = FakeEscritorio()
+    cli = FakeCliente(plan, acciones)
+    historiales = []
+    original = E._pedir_accion
+
+    async def espiar(cliente, plan, historial, *a, **k):
+        historiales.append(list(historial))
+        return await original(cliente, plan, historial, *a, **k)
+    monkeypatch.setattr(E, "_pedir_accion", espiar)
+    _correr_con(cli, fake)
+    assert [c[1:3] for c in _clics(fake)] == [(1, 1), (9, 9)]  # el 2º guardar no se ejecutó
+    assert any("RECHAZADO/ALERTA" in h and "CL-0046" in h for h in historiales[-1])
+    assert any(h.startswith("paso 3: RECHAZADO") for h in historiales[-1])
+    # aunque el modelo lea algo "limpio" entre medias, guardar exige reconfirmar la identidad
+    estado = E._Estado(identidad_confirmada=False)
+    guardar = Accion(tipo="click", x=9, y=9, elemento="botón Guardar", compuerta="guardar")
+    assert "confirmar la identidad" in _aplicar_compuertas(guardar, plan, estado)[1]

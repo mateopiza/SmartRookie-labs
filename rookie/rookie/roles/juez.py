@@ -92,6 +92,12 @@ class _LecturaConteo(_Estricto):
     razon: str
 
 
+class _LecturaRegistro(_Estricto):
+    muestra_un_registro: bool  # ficha, formulario o detalle de UN registro (no un listado)
+    nombre: str
+    identificador: str
+
+
 class _LecturaFinal(_Estricto):
     valores: list[_ValorLeido]
     evidencia: bool
@@ -444,6 +450,49 @@ async def juzgar_compuerta(
     return veredicto
 
 
+# ── registro en pantalla tras guardar / crear ─────────────────────────────────
+
+_CAMPOS_QUE_IDENTIFICAN = ("nombre", "razon", "nit", "documento", "cedula", "codigo", "id")
+
+
+def _claves_del_registro(plan: Plan) -> list[str]:
+    if plan.identificacion:
+        return [v for v in plan.identificacion.values() if _compacto(v)]
+    return [
+        c.valor for c in plan.cambios_autorizados
+        if _compacto(c.valor) and any(p in _norm(c.campo) for p in _CAMPOS_QUE_IDENTIFICAN)
+    ]
+
+
+async def registro_tras_guardar(plan: Plan, png: bytes, cliente: ClienteModelos) -> Veredicto:
+    """Tras guardar/crear, ¿la pantalla muestra OTRO registro? (visto: un clic en Guardar abrió
+    otra ficha). aprobado=False solo si se ve con claridad UN registro cuyo nombre y código no
+    contienen ninguna clave del plan. Sin juez o sin registro concreto en pantalla: aprobado."""
+    claves = [_compacto(c) for c in _claves_del_registro(plan)]
+    claves = [c for c in claves if len(c) >= 3]
+    if not claves:
+        return Veredicto(aprobado=True, razon="sin claves para comparar el registro")
+    pregunta = (
+        "¿La pantalla muestra la ficha, el formulario o el detalle de UN registro concreto (no un "
+        "listado con varias filas)? Si sí, `muestra_un_registro`=true y copia su nombre y su "
+        "código o identificador tal como se ven; si no, false y ambos vacíos."
+    )
+    lectura = await _leer(cliente, _LecturaRegistro, pregunta, png, "registro")
+    if lectura is None:
+        return _no_disponible(True)
+    visto = _compacto(f"{lectura.nombre} {lectura.identificador}")
+    if not lectura.muestra_un_registro or not visto:
+        return Veredicto(aprobado=True, razon="no se ve un registro concreto")
+    if any(c in visto for c in claves):
+        return Veredicto(aprobado=True, razon="la pantalla muestra el registro de la tarea")
+    otro = " ".join(v for v in (lectura.nombre.strip(), lectura.identificador.strip()) if v)
+    return Veredicto(
+        aprobado=False,
+        razon=f"la pantalla muestra otro registro: {otro}",
+        datos_clave=_dedup([lectura.identificador, lectura.nombre]),
+    )
+
+
 # ── veredicto final (M9) ──────────────────────────────────────────────────────
 
 def _fuera_de_lista_blanca(escrituras: list[Cambio], plan: Plan) -> list[Cambio]:
@@ -642,4 +691,11 @@ async def veredicto_final(
     return veredicto
 
 
-__all__ = ["NO_DISPONIBLE", "TIMEOUT_S", "juzgar_compuerta", "veredicto_final", "verificar_conteo"]
+__all__ = [
+    "NO_DISPONIBLE",
+    "TIMEOUT_S",
+    "juzgar_compuerta",
+    "registro_tras_guardar",
+    "veredicto_final",
+    "verificar_conteo",
+]

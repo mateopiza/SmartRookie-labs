@@ -450,3 +450,29 @@ def test_conteo_por_paginas_distinto_rechaza_con_el_total_del_juez():
     v = _run(J.verificar_conteo(Resultado(estado="terminada", respuesta="45"), PLAN_CONTEO,
                                 [b"p1", b"p2"], cli))
     assert v.aprobado is False and "es 3" in v.razon
+
+
+# ──────────────────────── registro tras guardar ──────────────────────────────
+
+def _lect_registro(muestra, nombre="", identificador=""):
+    return {"_LecturaRegistro": {"muestra_un_registro": muestra, "nombre": nombre,
+                                 "identificador": identificador}}
+
+
+def test_registro_tras_guardar_detecta_otra_ficha():
+    plan = _plan(identificacion={"nombre": "Distribuciones El Faro"})
+    v = _run(J.registro_tras_guardar(plan, PNG, FakeCliente(_lect_registro(True, "Ferretería Ruiz", "CL-0046"))))
+    assert not v.aprobado and "CL-0046" in v.datos_clave
+
+
+def test_registro_tras_guardar_aprueba_el_mismo_registro_un_listado_o_sin_juez():
+    plan = _plan(identificacion={"nombre": "Distribuciones El Faro"})
+    mismo = FakeCliente(_lect_registro(True, "Distribuciones El Faro", "CL-0007"))
+    assert _run(J.registro_tras_guardar(plan, PNG, mismo)).aprobado
+    assert _run(J.registro_tras_guardar(plan, PNG, FakeCliente(_lect_registro(False)))).aprobado
+    assert _run(J.registro_tras_guardar(plan, PNG, FakeCliente(fallos=5))).aprobado
+    alta = _plan(tipo="crear", cambios_autorizados=[
+        Cambio(entidad="clientes", campo="nombre", valor="Papelería Los Andes"),
+        Cambio(entidad="clientes", campo="ciudad", valor="Pereira")])
+    nueva = FakeCliente(_lect_registro(True, "Papelería Los Andes", "CL-0141"))
+    assert _run(J.registro_tras_guardar(alta, PNG, nueva)).aprobado

@@ -377,6 +377,18 @@ async def _conteo_juez(
         return Veredicto(aprobado=False, razon=f"juez no disponible: {type(exc).__name__}")
 
 
+async def _registro_juez(plan: Plan, observacion_png: bytes, cliente: ClienteModelos) -> Veredicto:
+    try:
+        from rookie.roles.juez import registro_tras_guardar
+    except ImportError:
+        return Veredicto(aprobado=True, razon="juez no disponible")
+    try:
+        return await registro_tras_guardar(plan, observacion_png, cliente)
+    except Exception as exc:  # noqa: BLE001 - sin lectura no se alerta (la verificación final decide)
+        log.warning("juez falló (%s) leyendo el registro tras guardar", type(exc).__name__)
+        return Veredicto(aprobado=True, razon=f"juez no disponible: {type(exc).__name__}")
+
+
 # ── primitivas ────────────────────────────────────────────────────────────────
 
 async def _ejecutar_primitiva(escritorio: Escritorio, accion: Accion) -> None:
@@ -732,6 +744,28 @@ async def _bucle(
             f"cambio_pantalla={obs_actual.cambio}"
         )
         historial.append(linea)
+
+        if accion.compuerta in {"guardar", "crear"}:
+            # un clic en Guardar abrió OTRA ficha (visto en evaluación): no se sigue sobre ella
+            registro = await _registro_juez(plan, obs_actual.png, cliente)
+            grabador.paso(
+                png=None,
+                accion={"tipo": "registro_tras_guardar"},
+                meta={"aprobado": registro.aprobado, "razon": registro.razon},
+            )
+            if not registro.aprobado:
+                log.info("task_id=%s ALERTA tras %s: %s", task_id, accion.compuerta, registro.razon)
+                historial.append(
+                    f"paso {paso}: RECHAZADO/ALERTA: tras {accion.compuerta} {registro.razon}. "
+                    "NO edites ni guardes nada sobre ese registro: vuelve al registro de la "
+                    "identificación del plan y LÉELO (compuerta identidad) antes de cualquier otra "
+                    f"cosa. No repitas {accion.compuerta} sin haberlo leído."
+                )
+                if accion.compuerta == "guardar":
+                    # el guardado no consta sobre el registro correcto: solo se repite tras
+                    # reconfirmar la identidad (y pasar otra vez por el juez de guardar)
+                    estado.identidad_confirmada = False
+                    estado.guardados_por_campo.discard(_campo_de(accion, plan))
 
         if obs_actual.cambio:
             pasos_sin_cambio = 0
