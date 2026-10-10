@@ -40,8 +40,17 @@ Observaciones paso a paso en `rookie/banco/observaciones/<task_id>/`.
 | 14:43 | E2 | 14 | 113 | ✔ «sin acciones fuera de la tarea» ✔; la nota se ignoró | — | — |
 | 14:46 | E5 | 24 | 218 | ✔ fallida con 52345678 y 1019876543, pero a 70 s del límite | **tiempo**: 20 pasos para abrir Clientes. `capturar()` daba por estable dos frames iguales a 150 ms; si la app aún no repintaba (hasta 1 s) eran la pantalla VIEJA (el puntero sí se mueve al instante y cambia el hash). El modelo decidía sobre capturas atrasadas: menús «que no abren», clics que caen en el menú anterior | `computer_use/primitivas.py`: no aceptar estable antes de 1,0 s tras la acción (tope 2,0 s) + test |
 | 14:51 | E5 | 8 | 58 | ✔ fallida «identidad ambigua» · CL-0005 52345678, CL-0031 1019876543 | — | — |
+| 14:52 | E3 | 36 | 233 | ✘ inválida (contaminada) + «modelo no disponible» | alguien más operaba el escritorio (abrió «Nuevo cliente», escribió «Papelería Los Andes» en filtros). Propio: 3 salidas sin JSON tras razones larguísimas listando facturas | Prompt: conteos con TODOS los filtros, solo nombre EXACTO (no «e Hijos»), razón breve con el acumulado |
+| 14:59 | E3 | 12 | 84 | ✘ fallida; el ejecutor contó bien 16+18+11=45 | **compuerta**: el verificador solo ve la última página y no puede confirmar un conteo repartido en páginas. Además un clic en (0,0) «por error» | El ejecutor marca las páginas contadas; el verificador las recibe todas; el juez cuenta en CADA página y el código suma identificadores únicos (`juez.verificar_conteo`). Clics sin coordenadas o en (0,0) no se ejecutan |
+| 15:04 | E3 | 21 | 194 | ✘ «terminó sin resultado» | (a) **tiempo**: el campo Cliente perdía el foco entre el paso «clic» y el paso «escribir» (~4 s): ctrl+a seleccionaba la página. (b) `terminar` sin `resultado` ⇒ fallida. (c) 60 s de cuelgue de OpenRouter en el primer paso | (a) `escribir` hace clic en el campo y teclea en la misma primitiva (o reusa el clic previo). (b) `terminar` sin resultado se rechaza y se pide otra vez |
+| 15:09 | E3 | 53 | 263 | ✘ plazo: 40 `terminar` sin `resultado` | **transporte/esquema**: el campo opcional nuevo `evidencia` hacía que el modo strict omitiera `resultado` (sonda: sin `evidencia` vuelve a salir) | Sin campo nuevo: las páginas se marcan con `compuerta: "lectura"`; ejemplo JSON de `terminar` en el prompt; timeout del ejecutor 30→15 s (latencia real 2–6 s) |
+| 15:17 | E3 | 11 | 88 | ✔ `respuesta: 45`; juez por páginas [16, 18, 11] = 45 en 7,7 s | — | — |
 
 Notas:
+- Otra sesión cambió en paralelo `config/modelos.yaml` (orquestador → claude-opus-5.5, juez →
+  gpt-5.6-sol-pro, timeouts 40 s) y añadió a `prompts.py` los bloques RECONOCIMIENTO / LLENADO DE
+  FORMULARIOS y un historial inicial de «reconocimiento» en `ejecutor.py`. E3/E5 de las 15:17 ya
+  corren con ellos; el orquestador Opus tarda 5–8 s (antes 4 s).
 - Un tercero (otro agente de código, «pi», en una terminal) manda tareas a :8077 sobre el mismo
   escritorio (c5db6fbec34a 14:27, 1c703316ea20 14:38). Reportado al usuario.
 - El formulario de un alta guardada se queda abierto con `Código: CL-0141`; NO es un borrador

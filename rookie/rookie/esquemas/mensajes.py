@@ -88,7 +88,9 @@ class Accion(BaseModel):
     combo: str | None = None
     elemento: str = ""  # texto visible del objetivo ("botón Guardar")
     razon: str = ""
-    compuerta: Literal["identidad", "guardar", "crear", "exportar", "eliminar"] | None = None
+    compuerta: Literal["identidad", "guardar", "crear", "exportar", "eliminar", "lectura"] | None = None
+    # "lectura": la captura ACTUAL trae datos usados para la respuesta (una página contada).
+    # No es un campo aparte: un opcional más hacía que el modo strict omitiera `resultado`.
     coincidencias: Coincidencias = None  # obligatorio cuando compuerta == "identidad"
     resultado: Resultado | None = None  # obligatorio cuando tipo == "terminar"
 

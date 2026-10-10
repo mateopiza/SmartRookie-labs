@@ -579,3 +579,56 @@ def test_verificador_recibe_la_captura_de_terminar_y_la_actual():
     cli = _Cli(plan, acciones, Resultado(estado="terminada", detalle="visible"))
     _correr_con(cli, _EscritorioPngNumerado())
     assert cli.imagenes_verificador == [b"PNG3", b"PNG4"]
+
+
+def test_consulta_en_varias_paginas_usa_el_conteo_por_paginas_del_juez(monkeypatch):
+    vistos: dict[str, object] = {}
+
+    async def conteo(resultado, plan, pngs, cliente):
+        vistos["pngs"] = list(pngs)
+        return Veredicto(aprobado=True, razon="ok")
+
+    async def final_no_debe_llamarse(*a, **k):
+        raise AssertionError("con varias páginas manda el conteo por páginas")
+    monkeypatch.setattr(E, "_conteo_juez", conteo)
+    monkeypatch.setattr(E, "_veredicto_final_juez", final_no_debe_llamarse)
+    plan = _plan(tipo="consultar", modulo="facturas", identificacion={"cliente": "X"})
+    acciones = [
+        Accion(tipo="click", x=1, y=1, elemento="Siguiente", compuerta="lectura"),   # página 1 (PNG1)
+        Accion(tipo="click", x=1, y=1, elemento="Siguiente", compuerta="lectura"),   # página 2 (PNG2)
+        Accion(tipo="terminar", compuerta="lectura",                                  # página 3 (PNG3)
+               resultado=Resultado(estado="terminada", respuesta="45")),
+    ]
+    cli = FakeCliente(plan, acciones, Resultado(estado="terminada", respuesta="45"))
+    resultado, _ = _correr_con(cli, _EscritorioPngNumerado())
+    assert resultado.estado == "terminada" and resultado.respuesta == "45"
+    assert vistos["pngs"] == [b"PNG1", b"PNG2", b"PNG3"]
+
+
+def test_clic_en_cero_cero_no_llega_al_escritorio():
+    plan = _plan(tipo="consultar", modulo="facturas")
+    acciones = [Accion(tipo="click", x=0, y=0, elemento=""),
+                Accion(tipo="click", x=5, y=6, elemento="botón Buscar")]
+    fake = FakeEscritorio()
+    _correr_con(FakeCliente(plan, acciones), fake)
+    assert [c[1:3] for c in _clics(fake)] == [(5, 6)]
+
+
+def test_escribir_sin_coordenadas_reenfoca_el_campo_del_clic_anterior():
+    plan = _plan(tipo="consultar", modulo="facturas", textos_permitidos=["Ferretería Ruiz"])
+    acciones = [Accion(tipo="click", x=98, y=131, elemento="campo Cliente"),
+                Accion(tipo="escribir", texto="Ferretería Ruiz", elemento="campo Cliente")]
+    fake = FakeEscritorio()
+    _correr_con(FakeCliente(plan, acciones), fake)
+    tipos = [(a[0], a[1:3]) if a[0] == "click" else (a[0],) for a in fake.acciones]
+    # clic del paso, y otra vez clic justo antes de teclear
+    assert tipos[:3] == [("click", (98, 131)), ("click", (98, 131)), ("escribir",)]
+
+
+def test_terminar_sin_resultado_se_rechaza_y_se_puede_repetir():
+    plan = _plan(tipo="consultar", modulo="facturas")
+    acciones = [Accion(tipo="terminar"),
+                Accion(tipo="terminar", resultado=Resultado(estado="terminada", respuesta="45"))]
+    cli = FakeCliente(plan, acciones, Resultado(estado="terminada", respuesta="45"))
+    resultado, _ = _correr_con(cli, FakeEscritorio())
+    assert resultado.estado == "terminada" and resultado.respuesta == "45"

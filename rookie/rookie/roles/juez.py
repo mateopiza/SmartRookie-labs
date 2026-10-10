@@ -86,6 +86,12 @@ class _LecturaFiltros(_Estricto):
     razon: str
 
 
+class _LecturaConteo(_Estricto):
+    filas_que_cumplen: int
+    identificadores: list[str]  # el código o id de cada fila contada, tal como se ve
+    razon: str
+
+
 class _LecturaFinal(_Estricto):
     valores: list[_ValorLeido]
     evidencia: bool
@@ -566,6 +572,47 @@ async def _final_exportacion(plan: Plan, png: bytes, cliente: ClienteModelos) ->
     return Veredicto(aprobado=True, razon="exportación visible con los filtros del plan")
 
 
+async def verificar_conteo(
+    resultado: Resultado, plan: Plan, pngs: list[bytes], cliente: ClienteModelos
+) -> Veredicto:
+    """Consulta numérica repartida en varias capturas (páginas de un listado): el juez cuenta en
+    cada captura por separado y el CÓDIGO suma los identificadores únicos (una página capturada
+    dos veces no cuenta doble)."""
+    esperado = _numero(resultado.respuesta)
+    if esperado is None:
+        return Veredicto(aprobado=False, razon="consulta sin número que verificar")
+    datos = ", ".join(plan.pregunta.datos) if plan.pregunta and plan.pregunta.datos else "filas"
+    pregunta = (
+        f"Esta captura es UNA página de un listado. Se cuentan: {datos}.\n"
+        f"Registro: {_describir(plan.identificacion)}. Filtros: {_describir(plan.filtros)}.\n"
+        "Cuenta las filas VISIBLES en esta captura que cumplen TODO: el registro es EXACTAMENTE "
+        "el indicado (no cuentes nombres parecidos o más largos que lo contienen) y cumple lo que "
+        "se cuenta (estado, fechas). En `identificadores` copia el código o id de cada fila "
+        "contada; `filas_que_cumplen` es cuántas listaste. Si la captura no es un listado, 0."
+    )
+    inicio = time.perf_counter()
+    lecturas = await asyncio.gather(
+        *(_leer(cliente, _LecturaConteo, pregunta, png, f"conteo-{i + 1}") for i, png in enumerate(pngs))
+    )
+    if any(lec is None for lec in lecturas):
+        return _no_disponible(False)
+    unicos: dict[str, None] = {}
+    for lec in lecturas:
+        for ident in lec.identificadores:
+            if _compacto(ident):
+                unicos.setdefault(_compacto(ident), None)
+    total = len(unicos)
+    por_pagina = [lec.filas_que_cumplen for lec in lecturas]
+    log.info("juez conteo paginas=%s total_unicos=%d esperado=%s ms=%.0f",
+             por_pagina, total, esperado, (time.perf_counter() - inicio) * 1000)
+    if abs(total - esperado) > 1e-9:
+        return Veredicto(
+            aprobado=False,
+            razon=f"el conteo del juez por páginas es {total} ({por_pagina}), no {resultado.respuesta}",
+        )
+    return Veredicto(aprobado=True, razon=f"conteo por páginas confirmado: {total}")
+
+
 async def veredicto_final(
     resultado: Resultado, plan: Plan, observacion_png: bytes, cliente: ClienteModelos
 ) -> Veredicto:
@@ -593,4 +640,4 @@ async def veredicto_final(
     return veredicto
 
 
-__all__ = ["NO_DISPONIBLE", "TIMEOUT_S", "juzgar_compuerta", "veredicto_final"]
+__all__ = ["NO_DISPONIBLE", "TIMEOUT_S", "juzgar_compuerta", "veredicto_final", "verificar_conteo"]

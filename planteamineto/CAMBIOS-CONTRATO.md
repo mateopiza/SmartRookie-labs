@@ -28,3 +28,12 @@ Cada entrada: fecha y hora, fase, qué cambia, por qué y si rompe algo.
   reset). El ejecutor rechaza ahora filas vacías.
 - **Para el juez:** `_misma_fila` y `_id_de_coincidencia` siguen funcionando (valores string; el
   `texto` lleva la fila completa con el documento).
+
+## 2026-10-10 15:15 · Fase H · `Accion.compuerta` admite `"lectura"` (aditivo)
+
+- **Qué:** nuevo valor `"lectura"`: la captura actual trae datos usados para responder una
+  consulta (una página contada). No es crítica: no pasa por el juez de compuertas.
+- **Por qué:** un conteo repartido en páginas no se verifica con una sola captura. El ejecutor
+  junta las páginas marcadas, el verificador las ve todas y `juez.verificar_conteo` cuenta en cada
+  una y suma identificadores únicos. Se probó un campo booleano aparte (`evidencia`), pero con un
+  opcional más el modo strict del proveedor dejaba de emitir `resultado` en `terminar`.

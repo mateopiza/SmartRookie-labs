@@ -415,3 +415,38 @@ def test_real_crear_duplicado():
     plan = _plan(tipo="crear", identificacion={"nombre": "Ana Torres", "documento": "52345678"})
     v, _ms = _medir(juzgar_compuerta(Accion(tipo="click", compuerta="crear"), plan, png, _cliente_real()))
     assert not v.aprobado
+
+
+# ──────────────────────── Fase H: conteo repartido en páginas ─────────────────
+
+class _ClientePorPagina:
+    """Devuelve una lectura de conteo distinta según la imagen (b"p1", b"p2"...)."""
+
+    def __init__(self, por_png: dict[bytes, dict]):
+        self.por_png = por_png
+
+    async def estructurado(self, rol, *, esquema, imagenes=(), **kw):
+        return esquema.model_validate(self.por_png[imagenes[0]])
+
+
+def _conteo(ids):
+    return {"filas_que_cumplen": len(ids), "identificadores": ids, "razon": ""}
+
+
+PLAN_CONTEO = _plan(tipo="consultar", modulo="facturas", identificacion={"cliente": "Ferretería Ruiz"},
+                    pregunta=Pregunta(datos=["facturas vencidas"], formato="numero"))
+
+
+def test_conteo_por_paginas_suma_identificadores_unicos():
+    cli = _ClientePorPagina({b"p1": _conteo(["FV-1", "FV-2"]), b"p2": _conteo(["FV-3"]),
+                             b"p2bis": _conteo(["FV-3"])})  # la misma página capturada dos veces
+    v = _run(J.verificar_conteo(Resultado(estado="terminada", respuesta="3"), PLAN_CONTEO,
+                                [b"p1", b"p2", b"p2bis"], cli))
+    assert v.aprobado is True
+
+
+def test_conteo_por_paginas_distinto_rechaza_con_el_total_del_juez():
+    cli = _ClientePorPagina({b"p1": _conteo(["FV-1", "FV-2"]), b"p2": _conteo(["FV-3"])})
+    v = _run(J.verificar_conteo(Resultado(estado="terminada", respuesta="45"), PLAN_CONTEO,
+                                [b"p1", b"p2"], cli))
+    assert v.aprobado is False and "es 3" in v.razon

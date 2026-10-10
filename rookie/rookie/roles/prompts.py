@@ -83,15 +83,18 @@ mira la imagen y da las coordenadas del centro del objetivo.
 
 Acciones (`tipo`):
 - "click": clic simple en (x,y). "doble_click": doble clic en (x,y).
-- "escribir": escribe `texto` en el campo enfocado. SIEMPRE da primero un "click" en el campo;
-  la app CONCATENA si escribes sobre texto, así que el agente reemplaza el contenido por ti.
+- "escribir": escribe `texto` en un campo. Da `x`,`y` DEL CAMPO: el agente hace clic en él y
+  teclea en el mismo instante (si escribes en un paso aparte, el campo puede perder el foco).
+  La app CONCATENA si escribes sobre texto, así que el agente reemplaza el contenido por ti.
   Solo puedes escribir valores que estén en el plan; cualquier otro texto será rechazado.
 - "tecla": pulsa `combo` ("enter","escape","tab","shift+tab","ctrl+a","backspace",flechas...).
   Usa teclado (Tab, Enter) cuando sea más fiable que el clic.
 - "scroll": rueda en (x,y) para ver más filas.
 - "esperar": si la pantalla aún está repintando.
-- "terminar": cuando creas haber terminado; incluye `resultado` (estado "terminada" o "fallida",
-  y para consultas la `respuesta` leída de la pantalla).
+- "terminar": cuando creas haber terminado. SIEMPRE con el objeto `resultado` (sin él la acción
+  se rechaza): estado "terminada" o "fallida", y en consultas la `respuesta`. Ejemplo:
+  {"tipo":"terminar","elemento":"listado, última página","razon":"acumulado 12",
+   "compuerta":"lectura","resultado":{"estado":"terminada","respuesta":"12","detalle":"12 órdenes pendientes"}}
 
 Campos que acompañan cada acción:
 - `elemento`: el texto visible del objetivo ("botón Guardar", "campo Teléfono").
@@ -104,9 +107,11 @@ Campos que acompañan cada acción:
   - "crear": la acción que da de alta el registro (p. ej. el botón Guardar de un alta nueva).
   - "guardar": la acción que persiste un cambio en un registro existente.
   - "exportar": la acción que genera/exporta el reporte.
+  - "lectura": la captura ACTUAL contiene datos que usas para la respuesta de una consulta (cada
+    página que cuentas o lees, y la última al terminar). Así se verifica tu conteo.
 
 Reglas de trabajo:
-- Antes de escribir en un campo, haz clic en él.
+- Para escribir en un campo, da sus coordenadas en la propia acción "escribir".
 - Tras cada acción recibes la nueva captura; comprueba el efecto antes del siguiente paso.
 - Si tras un click la pantalla NO cambió (el historial lo dirá), prueba otra estrategia: otro
   punto, teclado, u otra ruta. No repitas la misma acción una y otra vez.
@@ -118,6 +123,12 @@ Reglas de trabajo:
 - LISTAS Y BÚSQUEDA: la búsqueda suele ser por COINCIDENCIA PARCIAL del texto y SENSIBLE A TILDES
   (un acento mal puesto no encuentra el registro). Escribe el término tal como viene en el plan. Al
   CONTAR filas revisa la PAGINACIÓN: no asumas que todo cabe en la primera página.
+- CONTEOS: aplica primero TODOS los filtros que ofrezca la pantalla (registro, estado, fechas) y
+  pulsa Buscar; luego cuenta página por página. La búsqueda por subcadena puede traer registros
+  de nombre parecido ("Acme" también trae "Acme e Hijos"): cuenta solo las filas cuyo nombre es
+  EXACTAMENTE el pedido. En la `razon` lleva solo el acumulado ("página 2: 20 filas exactas,
+  acumulado 40"), sin listar códigos.
+- La `razon` es BREVE: una o dos frases.
 - CAMPOS DE SELECCIÓN: ciudad, estado y similares suelen ser listas desplegables (select), no
   campos de texto: despliégalas y ELIGE la opción; no escribas dentro. Si el valor pedido no está
   entre las opciones, es señal de problema (repórtalo, no lo inventes).
@@ -137,6 +148,27 @@ Reglas de trabajo:
   acción con compuerta "identidad" y `coincidencias` = las filas encontradas (lista vacía si no
   hay ninguna). Solo entonces abre el formulario. Si ya existe un registro con ese nombre o
   documento, NO lo crees otra vez: el código terminará la tarea como fallida "ya existe".
+
+RECONOCIMIENTO (setup): NO tienes prisa; tienes tiempo de sobra para CONOCER la interfaz antes
+de actuar. Dedica tus PRIMERAS acciones a orientarte, no a escribir:
+- Identifica la barra de menú superior y su estructura. Abre el menú que lleva a tu módulo y
+  confirma la RUTA real mirando CADA captura antes de seguir; no encadenes clics a ciegas.
+- Al llegar al listado del módulo, observa sus filtros, botones y columnas.
+- Al abrir un formulario, LEE y enumera sus campos (etiqueta y tipo: texto o desplegable) ANTES
+  de escribir nada. Un minuto de reconocimiento evita diez clics perdidos.
+
+LLENADO DE FORMULARIOS (altas y ediciones): rellena UN campo a la vez con este ciclo fijo:
+  1) clic EXACTO dentro del rectángulo del input (no sobre su etiqueta ni al lado);
+  2) si el campo ya traía texto, pulsa ctrl+a para seleccionarlo (así se reemplaza, no se concatena);
+  3) escribe el valor del plan (solo valores del plan);
+  4) en la SIGUIENTE captura LEE el campo y confirma que quedó el valor correcto antes de pasar al
+     siguiente. Si no entró, el foco no estaba en el input: repite el clic dentro del campo.
+  Puedes usar Tab para moverte entre campos. Ciudad, estado y similares son DESPLEGABLES: ábrelos
+  y elige la opción; no escribas dentro.
+- MIENTRAS UN FORMULARIO ESTÁ ABIERTO no toques la barra de menú superior ni cambies de módulo:
+  eso te saca del formulario y pierdes lo escrito. Quédate dentro hasta pulsar Guardar.
+- Solo cuando TODOS los campos pedidos estén visibles con su valor correcto, pulsa Guardar
+  (compuerta "crear" o "guardar") UNA sola vez; después lee el registro para confirmar.
 """
 
 

@@ -43,12 +43,13 @@ from rookie.roles.prompts import EJECUTOR_SYSTEM, VERIFICADOR_SYSTEM
 log = logging.getLogger("rookie.roles.ejecutor")
 
 # ── presupuesto y límites (segundos / pasos) ──────────────────────────────────
-MARGEN_S = 15.0           # Guardias cierra 15 s antes del deadline real
-UMBRAL_CIERRE_S = 40.0    # por debajo: el prompt pide "cierra con lo verificable"
-UMBRAL_FALLIDA_S = 15.0   # por debajo: fallida "plazo agotado"
+MARGEN_S = 10.0           # Guardias cierra 10 s antes del deadline real
+UMBRAL_CIERRE_S = 35.0    # por debajo: el prompt pide "cierra con lo verificable"
+UMBRAL_FALLIDA_S = 10.0   # por debajo: fallida "plazo agotado"
 MAX_PASOS = 60            # tope duro de pasos lógicos
 MAX_SIN_CAMBIO = 6        # 6 pasos sin que cambie el hash -> fallida
 MAX_REPETICION = 3        # misma acción 3 veces sobre el mismo hash -> forzar cambio
+MAX_EVIDENCIAS = 6        # capturas-evidencia (páginas) que se pasan al verificar
 MAX_RECHAZOS_JUEZ = 3     # 3 rechazos del juez en la misma compuerta irreversible -> fallida
 
 DETALLE_PLAZO = "plazo agotado"
@@ -300,6 +301,20 @@ async def _veredicto_final_juez(
         return Veredicto(aprobado=False, razon=f"juez no disponible: {type(exc).__name__}")
 
 
+async def _conteo_juez(
+    resultado: Resultado, plan: Plan, pngs: list[bytes], cliente: ClienteModelos
+) -> Veredicto:
+    try:
+        from rookie.roles.juez import verificar_conteo
+    except ImportError:
+        return Veredicto(aprobado=True, razon="juez no disponible")
+    try:
+        return await verificar_conteo(resultado, plan, pngs, cliente)
+    except Exception as exc:  # noqa: BLE001 - sin confirmación independiente no hay terminada
+        log.warning("juez falló (%s) en el conteo; no se confirma", type(exc).__name__)
+        return Veredicto(aprobado=False, razon=f"juez no disponible: {type(exc).__name__}")
+
+
 # ── primitivas ────────────────────────────────────────────────────────────────
 
 async def _ejecutar_primitiva(escritorio: Escritorio, accion: Accion) -> None:
@@ -312,7 +327,10 @@ async def _ejecutar_primitiva(escritorio: Escritorio, accion: Accion) -> None:
         await escritorio.click(x, y, doble=True)
     elif t == "escribir":
         if accion.x is not None and accion.y is not None:
+            # clic y tecleo en la MISMA primitiva: entre dos pasos (~4 s) la app puede quitar el
+            # foco al campo y entonces ctrl+a selecciona la página y el texto se pierde
             await escritorio.click(accion.x, accion.y)
+            await asyncio.sleep(0.3)
         await escritorio.escribir(accion.texto or "", reemplazar=True)
     elif t == "tecla":
         await escritorio.tecla(accion.combo or "")
@@ -373,6 +391,7 @@ async def _verificar_final(
     task_id: str,
     grabador: Grabador,
     obs_terminar: Observacion | None = None,
+    evidencias: list[Observacion] | None = None,
 ) -> Resultado:
     try:
         guardias.comprobar()
@@ -399,6 +418,15 @@ async def _verificar_final(
         ),
     }]
     imagenes = [obs_terminar.png, obs.png] if obs_terminar is not None else [obs.png]
+    paginas = [e.png for e in (evidencias or [])]
+    if len(paginas) >= 2:
+        # dato repartido en varias capturas (páginas): el verificador las ve todas, en orden
+        mensajes[0]["content"] += (
+            f"\n\nAdemás te muestro primero {len(paginas)} capturas que el ejecutor marcó como "
+            "evidencia (páginas de un listado, en orden). Si el dato se reparte entre ellas, "
+            "cuenta en cada una y suma, sin contar dos veces la misma fila."
+        )
+        imagenes = paginas + [obs.png]
     try:
         ver = await cliente.estructurado(
             "ejecutor", system=VERIFICADOR_SYSTEM, mensajes=mensajes,
@@ -432,6 +460,22 @@ async def _verificar_final(
             detalle=ver.detalle or "no se pudo verificar el resultado en pantalla",
             datos_clave=ver.datos_clave,
         )
+
+    if plan.tipo == "consultar" and len(paginas) >= 2:
+        # un conteo repartido en páginas no se lee en una sola captura: el juez cuenta cada
+        # página por separado y el código suma
+        veredicto = await _conteo_juez(final, plan, paginas, cliente)
+        grabador.paso(
+            png=None,
+            accion={"tipo": "veredicto_conteo"},
+            meta={"aprobado": veredicto.aprobado, "razon": veredicto.razon, "paginas": len(paginas)},
+        )
+        if not veredicto.aprobado:
+            return Resultado(
+                estado="fallida", detalle=f"el juez no confirmó el conteo: {veredicto.razon}",
+                datos_clave=list(veredicto.datos_clave),
+            )
+        return final
 
     # segunda comprobación independiente (juez, otro proveedor): sin ella no hay terminada.
     # Ve la captura sobre la que el ejecutor decidió terminar: los avisos de éxito ("… creado")
@@ -469,7 +513,16 @@ async def _bucle(
     grabador: Grabador,
     obs0: Observacion,
 ) -> Resultado:
-    historial: list[str] = []
+    # setup/reconocimiento: el primer contexto del ejecutor le recuerda que tiene tiempo para
+    # CONOCER la interfaz (orientarse, confirmar la ruta del menú y leer los campos del
+    # formulario) antes de escribir, en vez de lanzarse a clics a ciegas.
+    historial: list[str] = [
+        (
+            "reconocimiento: aún no has actuado. Tienes tiempo para conocer la interfaz: "
+            "oriéntate, confirma la ruta del menú a tu módulo mirando cada captura y, dentro "
+            "de un formulario, identifica los campos antes de escribir."
+        )
+    ]
     estado = _Estado()
     obs_prev: Observacion | None = None
     obs_actual = obs0
@@ -477,6 +530,8 @@ async def _bucle(
     pasos_sin_cambio = 0
     fallos_modelo = 0
     rechazos_juez: dict[str, int] = {}
+    evidencias: list[Observacion] = []
+    ultimo_click: tuple[int, int] | None = None  # campo enfocado por el paso anterior
 
     for paso in range(1, MAX_PASOS + 1):
         guardias.comprobar()  # a. plazo / cerrada
@@ -508,17 +563,25 @@ async def _bucle(
                   "hash": obs_actual.hash},
         )
 
+        if accion.compuerta == "lectura" and all(e.hash != obs_actual.hash for e in evidencias):
+            evidencias.append(obs_actual)
+            evidencias = evidencias[-MAX_EVIDENCIAS:]
+
         # e. terminar -> verificación final obligatoria
         if accion.tipo == "terminar":
             propuesto = accion.resultado
             if propuesto is None:
-                return Resultado(estado="fallida", detalle="el ejecutor terminó sin resultado")
+                historial.append(
+                    f"paso {paso}: RECHAZADO: `terminar` necesita `resultado` (estado y, en una "
+                    "consulta, la `respuesta` leída). Repite terminar con el resultado completo."
+                )
+                continue
             if propuesto.estado == "fallida":
                 return propuesto  # el ejecutor declara que no se pudo; no se "verifica" un fallo
             log.info("task_id=%s terminar propuesto; verificando", task_id)
             return await _verificar_final(
                 cliente, plan, propuesto, escritorio, guardias, task_id, grabador,
-                obs_terminar=obs_actual,
+                obs_terminar=obs_actual, evidencias=evidencias,
             )
 
         # g. detección de bucle sobre pantalla sin cambios
@@ -576,8 +639,21 @@ async def _bucle(
                 historial.append(f"paso {paso}: el juez rechazó la acción: {veredicto.razon}")
                 continue
 
+        # un clic sin coordenadas o en (0,0) ("por error") caería en cualquier cosa: no se hace
+        if accion.tipo in {"click", "doble_click", "scroll"} and (
+            accion.x is None or accion.y is None or (accion.x, accion.y) == (0, 0)
+        ):
+            historial.append(
+                f"paso {paso}: RECHAZADO: un {accion.tipo} necesita las coordenadas del objetivo."
+            )
+            continue
+
+        if accion.tipo == "escribir" and (accion.x is None or accion.y is None) and ultimo_click:
+            accion = accion.model_copy(update={"x": ultimo_click[0], "y": ultimo_click[1]})
+
         # ejecutar la primitiva (PlazoAgotado/TareaCerrada propagan al cierre del finally)
         await _ejecutar_primitiva(escritorio, accion)
+        ultimo_click = (accion.x, accion.y) if accion.tipo == "click" else None
         _contabilizar(accion, plan, estado)
 
         # observar el efecto

@@ -1,26 +1,31 @@
-# Selección real consultando GET /models de OpenRouter (10-oct-2026).
-# Solo usamos OPENROUTER_API_KEY; todo por /chat/completions.
+# Selección priorizando capacidad por encima del costo (catálogo OpenRouter, 10-oct-2026).
+# Solo usamos OPENROUTER_API_KEY; todo por /chat/completions. Todos con visión (image input).
 
-# Claude más reciente con visión; Sonnet priorizado por latencia sobre Opus.
+# Planeación por tarea (una vez): el modelo más inteligente de Anthropic con visión, 1M ctx.
 orquestador:
-  modelo: anthropic/claude-sonnet-5.5
-  timeout_s: 25
-  max_tokens: 900
+  modelo: anthropic/claude-opus-5.5
+  timeout_s: 40
+  max_tokens: 1200
 
-# Mismo criterio para el rol que toma decisiones paso a paso.
+# Decisiones paso a paso con visión: el conductor del bucle (20-40 llamadas con historial de
+# imágenes en 5 min). Sonnet 5.5 es el punto rápido-e-INTELIGENTE: haiku es ~2x más rápido pero
+# declara identidades a lo loco (lee mal las coincidencias) y el juez lo rechaza; opus es más listo
+# pero tan lento (5-10 s/paso) que agota el plazo. Sonnet razona bien la búsqueda/identidad y, con
+# el protocolo de llenado guiado por código, completa el formulario con fiabilidad.
 ejecutor:
   modelo: anthropic/claude-sonnet-5.5
-  timeout_s: 25
-  max_tokens: 900
+  # latencia medida 2-6 s; un cuelgue de OpenRouter a 30 s x 2 intentos quemaba 60 s del plazo
+  timeout_s: 15
+  max_tokens: 1100
 
-# Juez con visión de proveedor distinto (OpenAI), usando su variante más reciente listada.
+# Segunda opinión independiente: proveedor distinto (OpenAI), variante pro con visión más capaz.
 juez:
-  modelo: openai/gpt-5.6-luna-pro
-  timeout_s: 25
-  max_tokens: 900
+  modelo: openai/gpt-5.6-sol-pro
+  timeout_s: 40
+  max_tokens: 1200
 
-# Respaldo de visión: Qwen-VL más reciente disponible en catálogo OpenRouter.
+# Respaldo de visión en un tercer proveedor (Google), Gemini Pro más reciente con visión.
 vision_respaldo:
-  modelo: qwen/qwen3-vl-235b-a22b-instruct
-  timeout_s: 25
-  max_tokens: 900
+  modelo: google/gemini-3.1-pro-preview
+  timeout_s: 40
+  max_tokens: 1200
