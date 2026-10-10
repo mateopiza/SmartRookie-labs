@@ -49,6 +49,7 @@ UMBRAL_FALLIDA_S = 15.0   # por debajo: fallida "plazo agotado"
 MAX_PASOS = 60            # tope duro de pasos lógicos
 MAX_SIN_CAMBIO = 6        # 6 pasos sin que cambie el hash -> fallida
 MAX_REPETICION = 3        # misma acción 3 veces sobre el mismo hash -> forzar cambio
+MAX_RECHAZOS_JUEZ = 3     # 3 rechazos del juez en la misma compuerta irreversible -> fallida
 
 DETALLE_PLAZO = "plazo agotado"
 Criticas = {"identidad", "guardar", "crear", "exportar", "eliminar"}
@@ -388,13 +389,20 @@ async def _verificar_final(
         "content": (
             "PLAN y RESULTADO PROPUESTO por el ejecutor:\n"
             f"{json.dumps(contexto, ensure_ascii=False)}\n\n"
-            "Relee SOLO la pantalla actual y confirma el resultado de forma independiente."
+            + (
+                "Te muestro DOS capturas: la del momento en que el ejecutor decidió terminar "
+                "(puede traer avisos efímeros de éxito o error) y la ACTUAL (la última). Confirma "
+                "el resultado de forma independiente con lo que se ve en ellas."
+                if obs_terminar is not None
+                else "Relee SOLO la pantalla actual y confirma el resultado de forma independiente."
+            )
         ),
     }]
+    imagenes = [obs_terminar.png, obs.png] if obs_terminar is not None else [obs.png]
     try:
         ver = await cliente.estructurado(
             "ejecutor", system=VERIFICADOR_SYSTEM, mensajes=mensajes,
-            esquema=Resultado, imagenes=[obs.png], task_id=task_id,
+            esquema=Resultado, imagenes=imagenes, task_id=task_id,
         )
     except ModeloNoDisponible:
         return Resultado(estado="fallida", detalle="no se pudo verificar el resultado")
@@ -468,6 +476,7 @@ async def _bucle(
     repeticiones: dict[tuple, int] = {}
     pasos_sin_cambio = 0
     fallos_modelo = 0
+    rechazos_juez: dict[str, int] = {}
 
     for paso in range(1, MAX_PASOS + 1):
         guardias.comprobar()  # a. plazo / cerrada
@@ -551,6 +560,18 @@ async def _bucle(
                             estado="fallida",
                             detalle=veredicto.razon or "identidad ambigua: el juez no la confirmó",
                             datos_clave=ids,
+                        )
+                if accion.compuerta != "identidad":
+                    n = rechazos_juez.get(accion.compuerta, 0) + 1
+                    rechazos_juez[accion.compuerta] = n
+                    if n >= MAX_RECHAZOS_JUEZ:
+                        # insistir solo quema el plazo; la acción irreversible no se ejecutó
+                        return Resultado(
+                            estado="fallida",
+                            detalle=(
+                                f"el juez rechazó {accion.compuerta} {n} veces: {veredicto.razon}"
+                            ),
+                            datos_clave=list(veredicto.datos_clave),
                         )
                 historial.append(f"paso {paso}: el juez rechazó la acción: {veredicto.razon}")
                 continue

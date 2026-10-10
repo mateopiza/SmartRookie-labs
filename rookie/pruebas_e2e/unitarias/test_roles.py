@@ -543,3 +543,39 @@ def test_esquema_de_coincidencias_anuncia_campos_fijos_al_modelo():
     a = Accion.model_validate({"tipo": "click", "compuerta": "identidad", "coincidencias": [
         {"nombre": "Ana Torres", "identificador": "52345678", "texto": "Ana Torres 52345678"}]})
     assert a.coincidencias[0]["identificador"] == "52345678"
+
+
+def test_tres_rechazos_del_juez_en_guardar_terminan_fallida_sin_quemar_el_plazo(monkeypatch):
+    llamadas = _juez_que(monkeypatch, compuerta="guardar", aprobado=False,
+                         razon="formulario no coincide: otro campo cambió")
+    guardar = [Accion(tipo="click", compuerta="guardar", x=400 + i, y=400, elemento="botón Guardar")
+               for i in range(10)]
+    acciones = [
+        Accion(tipo="click", compuerta="identidad", x=300, y=100, elemento="fila",
+               coincidencias=[{"nombre": "Ana Torres", "identificador": "52345678", "texto": "x"}]),
+        *guardar,
+    ]
+    fake = FakeEscritorio()
+    resultado, _ = _correr_con(FakeCliente(_plan_actualizar_telefono(), acciones), fake)
+    assert resultado.estado == "fallida"
+    assert "rechazó guardar 3 veces" in resultado.detalle
+    assert llamadas.count("guardar") == 3
+    assert all(a[1] < 400 for a in _clics(fake))  # ningún Guardar llegó al escritorio
+
+
+def test_verificador_recibe_la_captura_de_terminar_y_la_actual():
+    class _Cli(FakeCliente):
+        async def estructurado(self, rol, *, esquema, imagenes=(), **kw):
+            if esquema is Resultado:
+                self.imagenes_verificador = list(imagenes)
+            return await super().estructurado(rol, esquema=esquema, imagenes=imagenes, **kw)
+
+    plan = _plan_alta()
+    acciones = [
+        Accion(tipo="click", compuerta="identidad", coincidencias=[], x=1, y=1, elemento="buscar"),
+        Accion(tipo="click", compuerta="crear", x=2, y=2, elemento="botón Guardar"),
+        Accion(tipo="terminar", resultado=Resultado(estado="terminada")),
+    ]
+    cli = _Cli(plan, acciones, Resultado(estado="terminada", detalle="visible"))
+    _correr_con(cli, _EscritorioPngNumerado())
+    assert cli.imagenes_verificador == [b"PNG3", b"PNG4"]

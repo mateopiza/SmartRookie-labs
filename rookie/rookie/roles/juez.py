@@ -319,9 +319,12 @@ async def _guardar(plan: Plan, png: bytes, cliente: ClienteModelos) -> Veredicto
         "Se va a guardar el formulario en pantalla. Cambios autorizados:\n"
         f"{lista}\n"
         "Para cada clave, en el mismo orden, copia la clave tal cual y escribe en `valor` lo que "
-        "muestra ahora ese campo del formulario, tal como se ve. Indica en "
-        "`otros_campos_cambiados` si se ve que algún OTRO campo fue modificado o tiene un valor "
-        "distinto del que tenía el registro (por ejemplo, un campo vacío o con texto ajeno)."
+        "muestra ahora ese campo del formulario, tal como se ve. Pon `otros_campos_cambiados` "
+        "en true SOLO si se ve un error de escritura en OTRO campo: alguno de los valores "
+        "autorizados escrito en un campo que no es el suyo, o un campo con texto pegado o "
+        "duplicado (dos valores concatenados). Con una sola captura no puedes saber qué tenían "
+        "antes los demás campos: notas, observaciones u otros textos que ya traía el registro "
+        "NO cuentan como cambio, aunque te parezcan extraños."
     )
     lectura = await _leer(cliente, _LecturaFormulario, pregunta, png, "guardar")
     if lectura is None:
