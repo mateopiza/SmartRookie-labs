@@ -105,3 +105,11 @@ clic). Patrones y arreglos (17:21–17:27, sin tocar escritorios; unitarias 201 
 | Juez de guardar: «estado: en pantalla 'Programada'», «no visible» en tareas de varios pasos ⇒ 3 rechazos | compuerta | Bloquea valores parecidos pero distintos (errata/concatenado); ajenos o no visibles = otro paso; exige ≥ 1 correcto | 4b2a77e |
 | Lista blanca rechazó «P-0066» y «08:40» (datos leídos de la app) | compuerta | Dato ≤ 40 caracteres que el juez ve tal cual en pantalla ⇒ autorizado (real: 4,0 s / 2,7 s) | c668aa5 |
 | Identificaciones con 4–6 claves (medio de pago, modificado_por…) | decisión | Prompt: 1–3 datos que distinguen; contexto a `filtros`; varios registros de uno en uno (real: ident={fecha, profesional}) | 18a5a8e |
+
+### Despliegue (17:28 local / 22:28 UTC)
+
+- Dokploy tenía el autodespliegue **activado**: los autodespliegues de 22:23 y 22:24 UTC (push
+  de a641adb) terminaron en `error`; a las 22:25 alguien lanzó un «Rebuild deployment» (`done`).
+- `EQUIPO_TOKEN` en Dokploy ya era el token del equipo (`ftr_…`): no se tocó el entorno.
+- Despliegue manual de `de14c42` → `done`. `/health` 200 con el token, 401 sin él;
+  `GET /tasks` → `{"en_curso":[]}` (solo existe en esta versión: confirma el código nuevo).
