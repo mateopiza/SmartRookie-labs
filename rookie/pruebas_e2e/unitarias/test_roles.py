@@ -909,3 +909,17 @@ def test_dato_leido_en_una_pantalla_anterior_se_puede_escribir(monkeypatch):
     fake = _EscritorioPngNumerado()
     _correr_con(FakeCliente(plan, acciones), fake)
     assert [a[1] for a in fake.acciones if a[0] == "escribir"] == ["C-1459"]
+
+
+def test_fila_comprobada_acepta_el_nombre_en_otro_orden(monkeypatch):
+    async def visible(texto, png, cliente):
+        return Veredicto(aprobado=texto == "P-0066", razon="")
+    monkeypatch.setattr(E, "_texto_visible_juez", visible)
+    plan = _plan(tipo="actualizar", identificacion={"nombre": "Hugo Restrepo"})
+    fila = {"nombre": "Restrepo, Hugo", "identificador": "P-0066", "texto": "P-0066 Restrepo, Hugo"}
+    acc = Accion(tipo="click", compuerta="identidad", coincidencias=[fila])
+    v = Veredicto(aprobado=False, razon="identidad en disputa")
+    assert asyncio.run(E._fila_comprobada(acc, plan, v, b"PNG", None))
+    otra = {"nombre": "Restrepo, Ana", "identificador": "P-0066", "texto": "P-0066 Restrepo, Ana"}
+    acc2 = Accion(tipo="click", compuerta="identidad", coincidencias=[otra])
+    assert not asyncio.run(E._fila_comprobada(acc2, plan, v, b"PNG", None))

@@ -450,9 +450,20 @@ async def _fila_comprobada(
     filas = accion.coincidencias or []
     if len(filas) != 1 or veredicto.datos_clave:
         return False
-    texto_fila = _compacto(" ".join(str(v) for v in filas[0].values()))
-    ident = [_compacto(v) for v in plan.identificacion.values() if _compacto(v)]
-    if not ident or sum(1 for i in ident if i in texto_fila) * 2 < len(ident):
+    # por palabras y sin orden: la app puede mostrar «Restrepo, Hugo» o «1.019.876.543»
+    texto_fila = _norm(" ".join(str(v) for v in filas[0].values()))
+    palabras_fila = set(re.findall(r"[a-z0-9]+", texto_fila)) | {_compacto(texto_fila)}
+    compacto_fila = _compacto(texto_fila)
+
+    def esta(valor: str) -> bool:
+        palabras = re.findall(r"[a-z0-9]+", _norm(valor))
+        return bool(palabras) and (
+            all(w in palabras_fila or w in compacto_fila for w in palabras)
+            or _compacto(valor) in compacto_fila
+        )
+
+    ident = [v for v in plan.identificacion.values() if _compacto(v)]
+    if not ident or sum(1 for v in ident if esta(v)) * 2 < len(ident):
         return False
     identificador = _id_de_fila(filas[0])
     if not identificador or len(identificador) > MAX_TEXTO_LEIDO:
