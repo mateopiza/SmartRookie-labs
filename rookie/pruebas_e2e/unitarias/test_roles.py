@@ -664,3 +664,13 @@ def test_plan_acepta_filtros_e_identificacion_como_pares_del_esquema_estricto():
     assert plan.filtros == {"estado": "Entregado", "desde": "2026-09-01"}
     assert plan.identificacion == {"nombre": "Ana Torres"}
     assert Plan(tipo="crear", modulo="x", filtros={"a": "b"}).filtros == {"a": "b"}  # dict sigue valiendo
+
+
+def test_valor_de_un_cambio_autorizado_se_puede_escribir_aunque_falte_en_textos_permitidos():
+    plan = _plan(tipo="actualizar", identificacion={"nombre": "Distribuciones El Faro"},
+                 textos_permitidos=["Distribuciones El Faro"],
+                 cambios_autorizados=[Cambio(entidad="clientes", campo="telefono", valor="3001112233")])
+    ok = Accion(tipo="escribir", texto="3001112233", x=1, y=1)
+    assert _aplicar_compuertas(ok, plan, _Estado())[0] is True
+    otro = Accion(tipo="escribir", texto="3009999999", x=1, y=1)
+    assert _aplicar_compuertas(otro, plan, _Estado())[0] is False

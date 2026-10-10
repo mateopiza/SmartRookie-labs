@@ -68,7 +68,16 @@ def _norm(s: str | None) -> str:
 def _texto_autorizado(texto: str | None, plan: Plan) -> bool:
     if texto is None:
         return False
-    permitidos = {_norm(t) for t in plan.textos_permitidos if _norm(t)}
+    # los valores de los cambios, la identificación y los filtros son autorizados por definición
+    # aunque el orquestador olvide copiarlos a textos_permitidos (visto en evaluación: el
+    # teléfono pedido quedó fuera y el ejecutor no pudo escribirlo)
+    candidatos = [
+        *plan.textos_permitidos,
+        *(c.valor for c in plan.cambios_autorizados),
+        *plan.identificacion.values(),
+        *plan.filtros.values(),
+    ]
+    permitidos = {_norm(t) for t in candidatos if _norm(t)}
     return _norm(texto) in permitidos
 
 
