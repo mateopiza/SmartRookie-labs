@@ -15,6 +15,7 @@ Reglas de código:
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import logging
 import re
@@ -192,6 +193,17 @@ def _texto_coincide(esperado: str | None, visto: str | None) -> bool:
     return len(corto) >= 3 and corto in largo
 
 
+def _parecido(esperado: str | None, visto: str | None) -> bool:
+    """¿El valor visto es una versión estropeada del esperado (contiene o está contenido,
+    o se le parece mucho)? Un valor sin relación no lo es."""
+    a, b = _compacto(esperado), _compacto(visto)
+    if not a or not b:
+        return False
+    if a in b or b in a:
+        return True
+    return difflib.SequenceMatcher(None, a, b).ratio() >= 0.6
+
+
 def _describir(d: dict[str, str]) -> str:
     return ", ".join(f"{k} = {v!r}" for k, v in d.items()) or "(sin identificación explícita)"
 
@@ -367,18 +379,29 @@ async def _guardar(plan: Plan, png: bytes, cliente: ClienteModelos) -> Veredicto
     if lectura is None:
         return _no_disponible(False)
 
+    # Tareas de varios pasos: no todos los cambios autorizados están en el formulario que se
+    # guarda ahora. Bloquea un valor PARECIDO pero distinto (errata, concatenado, a medias);
+    # uno ajeno o no visible pertenece a otro paso. Hace falta al menos uno correcto a la vista.
     fallos: list[str] = []
     leidos: list[str] = []
+    notas: list[str] = []
+    correctos = 0
     for i, c in enumerate(cambios):
         v = _buscar(lectura.valores, c.campo, i)
-        if v is None or not v.visible:
-            fallos.append(f"{c.campo}: no visible")
+        if v is None or not v.visible or not _compacto(v.valor):
+            notas.append(f"{c.campo}: no visible")
             continue
-        if not _igual(c.valor, v.valor):
+        if _igual(c.valor, v.valor):
+            correctos += 1
+        elif _parecido(c.valor, v.valor):
             fallos.append(f"{c.campo}: en pantalla {v.valor!r}")
             leidos.append(f"{c.campo}: {v.valor}")
+        else:
+            notas.append(f"{c.campo}: en pantalla {v.valor!r} (otro paso)")
     if lectura.otros_campos_cambiados:
         fallos.append("otro campo cambió")
+    if not correctos and not fallos:
+        fallos.extend(notas or ["ningún valor autorizado visible"])
     if fallos:
         return Veredicto(
             aprobado=False, razon="formulario no coincide: " + "; ".join(fallos), datos_clave=leidos

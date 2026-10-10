@@ -179,6 +179,27 @@ def test_guardar_no_visible_rechaza():
     assert not v.aprobado and v.datos_clave == []
 
 
+def test_guardar_en_tarea_de_varios_pasos_ignora_campos_de_otro_paso():
+    plan = _plan(identificacion={"codigo": "C-1305"}, cambios_autorizados=[
+        Cambio(entidad="citas", campo="estado", valor="Cancelada"),
+        Cambio(entidad="citas", campo="motivo", valor="Inasistencias reiteradas"),
+        Cambio(entidad="citas", campo="hora", valor="08:40")])
+    lect = {"_LecturaFormulario": {"valores": [
+        {"clave": "estado", "visible": True, "valor": "Programada"},          # otro paso
+        {"clave": "motivo", "visible": True, "valor": "Inasistencias reiteradas"},
+        {"clave": "hora", "visible": False, "valor": ""}],
+        "otros_campos_cambiados": False, "razon": ""}}
+    v = _run(juzgar_compuerta(Accion(tipo="click", compuerta="guardar"), plan, PNG, FakeCliente(lect)))
+    assert v.aprobado
+    concatenado = {"_LecturaFormulario": {"valores": [
+        {"clave": "estado", "visible": True, "valor": "Programada"},
+        {"clave": "motivo", "visible": True, "valor": "Inasistencias reiteradasInasistencias"},
+        {"clave": "hora", "visible": False, "valor": ""}],
+        "otros_campos_cambiados": False, "razon": ""}}
+    v = _run(juzgar_compuerta(Accion(tipo="click", compuerta="guardar"), plan, PNG, FakeCliente(concatenado)))
+    assert not v.aprobado and "motivo" in v.razon
+
+
 def test_guardar_sin_cambios_autorizados_rechaza_sin_llamar():
     cli = FakeCliente()
     v = _run(juzgar_compuerta(Accion(tipo="click", compuerta="guardar"), _plan(), PNG, cli))
