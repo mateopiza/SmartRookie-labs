@@ -532,3 +532,13 @@ def test_guardar_acepta_campo_leido_con_su_etiqueta():
             "valor": "Consultorio 305"}], "otros_campos_cambiados": False, "razon": ""}}
     v = _run(juzgar_compuerta(Accion(tipo="click", compuerta="guardar"), plan, PNG, FakeCliente(lect)))
     assert v.aprobado
+
+
+def test_texto_visible_exige_evidencia_y_el_mismo_texto():
+    def lect(valor, evidencia=True, visible=True):
+        return {"_LecturaFinal": {"valores": [{"clave": "texto", "visible": visible, "valor": valor}],
+                                  "evidencia": evidencia, "razon": ""}}
+    assert _run(J.texto_visible("08:40", PNG, FakeCliente(lect("08:40")))).aprobado
+    assert not _run(J.texto_visible("08:40", PNG, FakeCliente(lect("08:45")))).aprobado
+    assert not _run(J.texto_visible("08:40", PNG, FakeCliente(lect("08:40", evidencia=False)))).aprobado
+    assert not _run(J.texto_visible("08:40", PNG, FakeCliente(fallos=9))).aprobado

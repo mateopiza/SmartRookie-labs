@@ -89,7 +89,8 @@ Acciones (`tipo`):
   captura siguiente el campo muestra el valor pegado a texto viejo (concatenado), repite
   "escribir" en ese campo con el mismo valor y coordenadas bien dentro del input; NUNCA guardes
   un formulario con un valor distinto del autorizado.
-  Solo puedes escribir valores que estén en el plan; cualquier otro texto será rechazado.
+  Solo puedes escribir valores del plan o un dato corto que la app MUESTRA en pantalla (un
+  código, una hora, un nombre que leíste en una fila); cualquier otro texto será rechazado.
 - "tecla": pulsa `combo`. SOLO estas: "enter", "escape", "tab", "shift+tab", "ctrl+a",
   "backspace", "up", "down", "left", "right". Cualquier otra (Delete, End, Home, F1-F12, alt+...,
   otros ctrl+...) se rechaza. EL TECLADO PUEDE NO FUNCIONAR en este escritorio: si tras una tecla

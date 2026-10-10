@@ -498,6 +498,27 @@ async def juzgar_compuerta(
     return veredicto
 
 
+# ── texto leído de la pantalla (lista blanca ampliada) ────────────────────────
+
+async def texto_visible(texto: str, png: bytes, cliente: ClienteModelos) -> Veredicto:
+    """¿`texto` aparece tal cual en la pantalla como dato de la app (un código, una hora, un
+    nombre en una fila)? Permite escribir datos leídos de la app en tareas de varios pasos."""
+    pregunta = (
+        f"Texto buscado: {texto!r}.\n¿Aparece EXACTAMENTE ese texto en la pantalla como dato de "
+        "la aplicación (en una fila, una ficha, una etiqueta o una opción), y NO solo dentro de un "
+        "campo de entrada que se esté llenando? En `valores` pon una entrada con clave 'texto' y "
+        "el texto tal como se ve (vacío y visible=false si no está); `evidencia` = true solo si "
+        "aparece exactamente."
+    )
+    lectura = await _leer(cliente, _LecturaFinal, pregunta, png, "texto-visible")
+    if lectura is None:
+        return _no_disponible(False)
+    v = lectura.valores[0] if lectura.valores else None
+    if lectura.evidencia and v is not None and v.visible and _compacto(v.valor) == _compacto(texto):
+        return Veredicto(aprobado=True, razon="el texto se ve en la pantalla")
+    return Veredicto(aprobado=False, razon="el texto no se ve en la pantalla")
+
+
 # ── registro en pantalla tras guardar / crear ─────────────────────────────────
 
 _CAMPOS_QUE_IDENTIFICAN = ("nombre", "razon", "nit", "documento", "cedula", "codigo", "id")
@@ -744,6 +765,7 @@ __all__ = [
     "TIMEOUT_S",
     "juzgar_compuerta",
     "registro_tras_guardar",
+    "texto_visible",
     "veredicto_final",
     "verificar_conteo",
 ]

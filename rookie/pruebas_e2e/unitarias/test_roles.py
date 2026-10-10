@@ -39,6 +39,10 @@ def juez_aprueba(monkeypatch):
     monkeypatch.setattr(E, "_veredicto_final_juez", aprobar)
     monkeypatch.setattr(E, "_registro_juez", aprobar)
 
+    async def no_visible(*args, **kwargs):
+        return Veredicto(aprobado=False, razon="prueba: no se ve")
+    monkeypatch.setattr(E, "_texto_visible_juez", no_visible)
+
 
 def _juez_que(monkeypatch, *, compuerta, aprobado, razon="", datos_clave=()):
     """Juez de compuertas falso: devuelve `aprobado` solo para `compuerta`; aprueba el resto."""
@@ -804,3 +808,20 @@ def test_disputas_de_identidad_repetidas_terminan_sin_quemar_el_plazo(monkeypatc
     resultado, _ = _correr_con(cli, FakeEscritorio())
     assert resultado.estado == "fallida" and "no se pudo confirmar el registro" in resultado.detalle
     assert len(cli.acciones) == 5  # paró a la 4.ª disputa
+
+
+def test_dato_leido_en_pantalla_se_puede_escribir_si_el_juez_lo_ve(monkeypatch):
+    vistos = []
+
+    async def visible(texto, png, cliente):
+        vistos.append(texto)
+        return Veredicto(aprobado=texto == "P-0066", razon="")
+    monkeypatch.setattr(E, "_texto_visible_juez", visible)
+    plan = _plan(tipo="actualizar", identificacion={"nombre": "Hugo Restrepo"})
+    acciones = [Accion(tipo="escribir", x=5, y=5, texto="P-0066", elemento="campo Código"),
+                Accion(tipo="escribir", x=5, y=5, texto="X-9999", elemento="campo Código"),
+                Accion(tipo="escribir", x=5, y=5, texto="a" * 41, elemento="campo Notas")]
+    fake = FakeEscritorio()
+    _correr_con(FakeCliente(plan, acciones), fake)
+    assert [a[1] for a in fake.acciones if a[0] == "escribir"] == ["P-0066"]
+    assert vistos == ["P-0066", "X-9999"]  # el texto largo ni se consulta

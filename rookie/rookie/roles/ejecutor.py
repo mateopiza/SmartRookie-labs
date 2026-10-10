@@ -66,7 +66,7 @@ def _norm(s: str | None) -> str:
     return re.sub(r"\s+", " ", s).strip().lower()
 
 
-def _texto_autorizado(texto: str | None, plan: Plan) -> bool:
+def _texto_autorizado(texto: str | None, plan: Plan, leidos: set[str] | None = None) -> bool:
     if texto is None:
         return False
     # los valores de los cambios, la identificación y los filtros son autorizados por definición
@@ -77,6 +77,7 @@ def _texto_autorizado(texto: str | None, plan: Plan) -> bool:
         *(c.valor for c in plan.cambios_autorizados),
         *plan.identificacion.values(),
         *plan.filtros.values(),
+        *(leidos or ()),  # datos que el juez vio en la pantalla (códigos, horas…)
     ]
     permitidos = {_norm(t) for t in candidatos if _norm(t)}
     return _norm(texto) in permitidos
@@ -186,6 +187,7 @@ class _Estado:
     creaciones: int = 0
     exportaciones: int = 0
     guardados_por_campo: set[str] = field(default_factory=set)
+    textos_leidos: set[str] = field(default_factory=set)  # vistos en pantalla, confirmados
     verificacion_pendiente: bool = False  # último guardar/crear sin confirmar
 
 
@@ -196,12 +198,13 @@ def _aplicar_compuertas(
 ) -> tuple[bool, str | None, Resultado | None]:
     """(permitido, motivo_rechazo_para_historial, resultado_terminal_fallida)."""
     # b. Lista blanca de escritura
-    if accion.tipo == "escribir" and not _texto_autorizado(accion.texto, plan):
+    if accion.tipo == "escribir" and not _texto_autorizado(accion.texto, plan, estado.textos_leidos):
         return (
             False,
             (
-                f"RECHAZADO: el texto {accion.texto!r} no está en los textos permitidos del plan; "
-                "solo puedes escribir valores autorizados."
+                f"RECHAZADO: el texto {accion.texto!r} no está en los textos permitidos del plan "
+                "ni se ve tal cual en la pantalla; solo puedes escribir valores autorizados o "
+                "datos que la app muestra."
             ),
             None,
         )
@@ -381,6 +384,20 @@ async def _conteo_juez(
         return await verificar_conteo(resultado, plan, pngs, cliente)
     except Exception as exc:  # noqa: BLE001 - sin confirmación independiente no hay terminada
         log.warning("juez falló (%s) en el conteo; no se confirma", type(exc).__name__)
+        return Veredicto(aprobado=False, razon=f"juez no disponible: {type(exc).__name__}")
+
+
+MAX_TEXTO_LEIDO = 40  # un dato leído (código, hora, nombre), no un párrafo
+
+
+async def _texto_visible_juez(texto: str, observacion_png: bytes, cliente: ClienteModelos) -> Veredicto:
+    try:
+        from rookie.roles.juez import texto_visible
+    except ImportError:
+        return Veredicto(aprobado=False, razon="juez no disponible")
+    try:
+        return await texto_visible(texto, observacion_png, cliente)
+    except Exception as exc:  # noqa: BLE001 - sin juez no se amplía la lista blanca
         return Veredicto(aprobado=False, razon=f"juez no disponible: {type(exc).__name__}")
 
 
@@ -676,6 +693,22 @@ async def _bucle(
             )
             if repeticiones[clave_rep] > MAX_REPETICION:
                 continue  # no la volvemos a ejecutar
+
+        # lista blanca ampliada: un dato corto que NO está en el plan pero se ve en la pantalla
+        # (un código, la hora de un cupo) se puede escribir si el juez lo ve tal cual
+        texto = (accion.texto or "").strip()
+        if (
+            accion.tipo == "escribir"
+            and texto
+            and len(texto) <= MAX_TEXTO_LEIDO
+            and "\n" not in texto
+            and not _texto_autorizado(texto, plan, estado.textos_leidos)
+        ):
+            visto = await _texto_visible_juez(texto, obs_actual.png, cliente)
+            log.info("task_id=%s texto fuera del plan %r: %s", task_id, texto, visto.razon)
+            if visto.aprobado:
+                estado.textos_leidos.add(texto)
+                historial.append(f"paso {paso}: el texto {texto!r} se ve en la pantalla; autorizado.")
 
         # b-d. compuertas de código
         permitido, motivo, terminal = _aplicar_compuertas(accion, plan, estado)
