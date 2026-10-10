@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Secretos y entorno
+.env
+*.pem
+
+# Datos de runtime (libros + bitácora): volumen, no repo
+rookie/memoria/*
+!rookie/memoria/.gitkeep
+
+# Observaciones grabadas del banco (pesadas; se comparten aparte)
+rookie/banco/observaciones/*
+!rookie/banco/observaciones/.gitkeep
+
+# Harness local
+.claude/

@@ -1,0 +1,27 @@
+# rol → proveedor + modelo. Cambiar de modelo no toca el código (§5.3 del diseño).
+# Estas son las líneas base; la fase 4 (banco de pruebas, §5.4) decide los definitivos.
+
+explorador_vision:
+  proveedor: groq
+  modelo: llama-4-maverick
+
+explorador_libros:
+  proveedor: groq
+  modelo: gpt-oss-120b
+
+orquestador:
+  proveedor: openrouter
+  modelo: anthropic/claude-3.5-sonnet
+
+ejecutor:
+  proveedor: openrouter
+  modelo: anthropic/claude-3.5-sonnet
+
+# El juez debe ser de un proveedor distinto al del ejecutor (§5.3)
+juez:
+  proveedor: openrouter
+  modelo: openai/gpt-4o
+
+vision_respaldo:
+  proveedor: openrouter
+  modelo: qwen/qwen2.5-vl-72b-instruct
