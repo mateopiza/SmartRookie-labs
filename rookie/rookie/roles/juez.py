@@ -285,7 +285,12 @@ async def _identidad(accion: Accion, plan: Plan, png: bytes, cliente: ClienteMod
 
     del_ejecutor = accion.coincidencias or []
     ids_ejecutor = [_id_de_coincidencia(f) for f in del_ejecutor]
-    ids_juez = [f.identificador.strip() or f.texto.strip() for f in lectura.filas]
+    # una fila que ambos leyeron cuenta una vez (con el id del ejecutor); el juez solo añade las nuevas
+    ids_juez = [
+        f.identificador.strip() or f.texto.strip()
+        for f in lectura.filas
+        if not any(_misma_fila(e, f) for e in del_ejecutor)
+    ]
 
     if lectura.cantidad != len(lectura.filas):
         razon = (

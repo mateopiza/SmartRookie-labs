@@ -90,6 +90,17 @@ def test_identidad_ejecutor_ve_una_juez_dos_rechaza_con_union():
     assert v.datos_clave == ["52345678", "1019876543"]  # unión sin duplicados
 
 
+def test_identidad_union_no_repite_la_fila_comun_con_otro_identificador():
+    """El juez usa el código y el ejecutor el documento: la fila común cuenta una vez."""
+    cli = FakeCliente(_lect_identidad(
+        ("CL-0007", "CL-0007 Ana Torres 52345678 Bogotá"),
+        ("CL-0019", "CL-0019 Ana Torres 1019876543 Cali"),
+    ))
+    acc = Accion(tipo="click", compuerta="identidad", coincidencias=[ANA_1])
+    v = _run(juzgar_compuerta(acc, _plan(identificacion={"nombre": "Ana Torres"}), PNG, cli))
+    assert not v.aprobado and v.datos_clave == ["52345678", "CL-0019"]
+
+
 def test_identidad_mismo_conteo_otro_registro_rechaza_con_union():
     cli = FakeCliente(_lect_identidad(("CL-0019", "CL-0019 Ana Torres 1019876543 Cali")))
     acc = Accion(tipo="click", compuerta="identidad", coincidencias=[ANA_1])
@@ -367,8 +378,9 @@ def test_real_identidad_homonimos():
     png = (FIXTURES / "juez" / "homonimos.png").read_bytes()
     acc = Accion(tipo="click", compuerta="identidad", coincidencias=[ANA_1])  # el ejecutor "vio" una
     v, _ms = _medir(juzgar_compuerta(acc, _plan(identificacion={"nombre": "Ana Torres"}), png, _cliente_real()))
-    assert not v.aprobado
-    assert {"52345678", "1019876543"} <= {J._compacto(d) for d in v.datos_clave} | set(v.datos_clave)
+    assert not v.aprobado and len(v.datos_clave) == 2  # una entrada por homónimo
+    assert v.datos_clave[0] == "52345678"
+    assert J._compacto(v.datos_clave[1]) in {"1019876543", "cl0019"}
 
 
 @REAL
