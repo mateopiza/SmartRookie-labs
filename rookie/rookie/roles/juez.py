@@ -727,7 +727,9 @@ async def verificar_conteo(
         f"Registro: {_describir(plan.identificacion)}. Filtros: {_describir(plan.filtros)}.\n"
         "Cuenta las filas VISIBLES en esta captura que cumplen TODO: el registro es EXACTAMENTE "
         "el indicado (no cuentes nombres parecidos o más largos que lo contienen) y cumple lo que "
-        "se cuenta (estado, fechas). En `identificadores` copia el código o id de cada fila "
+        "se cuenta (estado, fechas). Si un dato del registro o de los filtros NO aparece como "
+        "columna (el listado ya viene filtrado por él), no descartes la fila por eso; solo la "
+        "descarta un dato visible distinto. En `identificadores` copia el código o id de cada fila "
         "contada; `filas_que_cumplen` es cuántas listaste. Si la captura no es un listado, 0."
     )
     inicio = time.perf_counter()
@@ -745,6 +747,12 @@ async def verificar_conteo(
     por_pagina = [lec.filas_que_cumplen for lec in lecturas]
     log.info("juez conteo paginas=%s total_unicos=%d esperado=%s ms=%.0f",
              por_pagina, total, esperado, (time.perf_counter() - inicio) * 1000)
+    if total == 0 and esperado > 0:
+        # ninguna fila contada en ninguna página: el dato no sale de contar filas (un contador o
+        # total en pantalla) o el listado no muestra las columnas; se lee el valor directamente
+        # (visto en evaluación: respuesta 47 confirmada por el verificador y el juez contó 0,0,0)
+        log.info("juez conteo: 0 filas en todas las páginas; se lee el valor en la última captura")
+        return await _final_consulta(resultado, plan, pngs[-1], cliente)
     if abs(total - esperado) > 1e-9:
         return Veredicto(
             aprobado=False,

@@ -579,3 +579,19 @@ def test_final_escritura_tolera_un_campo_no_visible_si_el_resto_se_ve_bien():
         {"clave": "fecha", "visible": False, "valor": ""},
         {"clave": "hora", "visible": True, "valor": "08:40"}], "evidencia": True, "razon": ""}}
     assert not _run(veredicto_final(res, plan, PNG, FakeCliente(solo_uno))).aprobado
+
+
+def test_conteo_en_cero_en_todas_las_paginas_lee_el_valor_directo():
+    lecturas = {
+        "_LecturaConteo": {"filas_que_cumplen": 0, "identificadores": [], "razon": ""},
+        "_LecturaFinal": {"valores": [{"clave": "citas", "visible": True, "valor": "47"}],
+                          "evidencia": True, "razon": ""},
+    }
+    plan = _plan(tipo="consultar", modulo="agenda", identificacion={"profesional": "Dra. Ríos"},
+                 pregunta=Pregunta(datos=["citas"], formato="numero"))
+    res = Resultado(estado="terminada", respuesta="47")
+    cli = FakeCliente(lecturas)
+    assert _run(J.verificar_conteo(res, plan, [PNG, PNG, PNG], cli)).aprobado
+    assert "no descartes la fila" in cli.llamadas[0]["texto"]
+    lecturas["_LecturaFinal"]["valores"][0]["valor"] = "45"
+    assert not _run(J.verificar_conteo(res, plan, [PNG, PNG, PNG], FakeCliente(lecturas))).aprobado
