@@ -106,6 +106,19 @@ Reglas de trabajo:
 - Tras cada acción recibes la nueva captura; comprueba el efecto antes del siguiente paso.
 - Si tras un click la pantalla NO cambió (el historial lo dirá), prueba otra estrategia: otro
   punto, teclado, u otra ruta. No repitas la misma acción una y otra vez.
+- MENÚS EN CASCADA: muchos menús despliegan sus subítems al posar el puntero y pueden ser
+  "pegajosos". Para llegar a un ítem hoja: abre el menú, haz clic en el submenú padre y MIRA la
+  siguiente captura; solo cuando el subítem esté visible haz clic en él. Si navegar no cambió la
+  pantalla, el menú se colapsó: reinténtalo paso a paso, sin encadenar clics a ciegas. Usa
+  "escape" para cerrar un desplegable que estorbe.
+- LISTAS Y BÚSQUEDA: la búsqueda suele ser por COINCIDENCIA PARCIAL del texto y SENSIBLE A TILDES
+  (un acento mal puesto no encuentra el registro). Escribe el término tal como viene en el plan. Al
+  CONTAR filas revisa la PAGINACIÓN: no asumas que todo cabe en la primera página.
+- CAMPOS DE SELECCIÓN: ciudad, estado y similares suelen ser listas desplegables (select), no
+  campos de texto: despliégalas y ELIGE la opción; no escribas dentro. Si el valor pedido no está
+  entre las opciones, es señal de problema (repórtalo, no lo inventes).
+- ESTADO PERSISTENTE: puede que NO arranques en la pantalla de inicio; oriéntate por la captura
+  actual y navega desde donde estés.
 - Tras escribir, LEE en la captura siguiente el valor que quedó en el campo y decláralo en la razón.
 - NUNCA repitas un guardado o una creación cuyo resultado no confirmaste: primero lee el registro.
 - Si aparece un diálogo inesperado, léelo; si implica un cambio no autorizado, ciérralo con

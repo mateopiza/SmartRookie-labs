@@ -228,8 +228,28 @@ async def _compuerta_juez(
     try:
         return await juzgar_compuerta(accion, plan, observacion_png, cliente)
     except Exception as exc:  # noqa: BLE001 - un fallo del juez no debe tumbar la tarea
-        log.warning("juez falló (%s); se aprueba para no bloquear", type(exc).__name__)
-        return Veredicto(aprobado=True, razon=f"juez no disponible: {type(exc).__name__}")
+        razon = f"juez no disponible: {type(exc).__name__}"
+        if accion.compuerta == "identidad":
+            # en identidad manda el conteo del ejecutor (ya pasó la compuerta de código)
+            log.warning("juez falló (%s) en identidad; se aprueba", type(exc).__name__)
+            return Veredicto(aprobado=True, razon=razon)
+        # guardar/crear/exportar son irreversibles: sin juez no se ejecutan
+        log.warning("juez falló (%s) en %s; se rechaza", type(exc).__name__, accion.compuerta)
+        return Veredicto(aprobado=False, razon=razon)
+
+
+async def _veredicto_final_juez(
+    resultado: Resultado, plan: Plan, observacion_png: bytes, cliente: ClienteModelos
+) -> Veredicto:
+    try:
+        from rookie.roles.juez import veredicto_final
+    except ImportError:
+        return Veredicto(aprobado=True, razon="juez no disponible")
+    try:
+        return await veredicto_final(resultado, plan, observacion_png, cliente)
+    except Exception as exc:  # noqa: BLE001 - sin confirmación independiente no hay terminada
+        log.warning("juez falló (%s) en el veredicto final; no se confirma", type(exc).__name__)
+        return Veredicto(aprobado=False, razon=f"juez no disponible: {type(exc).__name__}")
 
 
 # ── primitivas ────────────────────────────────────────────────────────────────
@@ -338,22 +358,41 @@ async def _verificar_final(
     )
 
     if plan.tipo == "consultar":
-        if ver.estado == "terminada" and ver.respuesta and ver.respuesta.strip():
-            return ver
-        return Resultado(estado="fallida", detalle=ver.detalle or "no se pudo leer la respuesta en pantalla")
-
-    if ver.estado == "terminada":
+        if not (ver.estado == "terminada" and ver.respuesta and ver.respuesta.strip()):
+            return Resultado(
+                estado="fallida", detalle=ver.detalle or "no se pudo leer la respuesta en pantalla"
+            )
+        final = ver
+    elif ver.estado == "terminada":
         escrituras = ver.escrituras or (propuesto.escrituras if propuesto else [])
-        return Resultado(
+        final = Resultado(
             estado="terminada",
             escrituras=escrituras,
             detalle=ver.detalle or (propuesto.detalle if propuesto else ""),
         )
-    return Resultado(
-        estado="fallida",
-        detalle=ver.detalle or "no se pudo verificar el resultado en pantalla",
-        datos_clave=ver.datos_clave,
+    else:
+        return Resultado(
+            estado="fallida",
+            detalle=ver.detalle or "no se pudo verificar el resultado en pantalla",
+            datos_clave=ver.datos_clave,
+        )
+
+    # segunda comprobación independiente (juez, otro proveedor): sin ella no hay terminada
+    veredicto = await _veredicto_final_juez(final, plan, obs.png, cliente)
+    grabador.paso(
+        png=None,
+        accion={"tipo": "veredicto_final"},
+        meta={"aprobado": veredicto.aprobado, "razon": veredicto.razon,
+              "datos_clave": list(veredicto.datos_clave)},
     )
+    if not veredicto.aprobado:
+        log.info("task_id=%s el juez no confirmó el resultado: %s", task_id, veredicto.razon)
+        return Resultado(
+            estado="fallida",
+            detalle=f"el juez no confirmó el resultado: {veredicto.razon}",
+            datos_clave=list(veredicto.datos_clave),
+        )
+    return final
 
 
 # ── bucle principal (núcleo testeable) ────────────────────────────────────────
@@ -447,6 +486,19 @@ async def _bucle(
         if accion.compuerta in Criticas:
             veredicto = await _compuerta_juez(accion, plan, obs_actual.png, cliente)
             if not veredicto.aprobado:
+                if accion.compuerta == "identidad":
+                    # la compuerta de código ya la había marcado; el juez no la confirma
+                    estado.identidad_confirmada = False
+                    estado.puede_crear = False
+                    ids = list(veredicto.datos_clave)
+                    ids += [i for i in _identificadores(accion.coincidencias or []) if i not in ids]
+                    if len(ids) >= 2:
+                        log.info("task_id=%s identidad ambigua según el juez: %s", task_id, ids)
+                        return Resultado(
+                            estado="fallida",
+                            detalle=f"identidad ambigua: {veredicto.razon}",
+                            datos_clave=ids,
+                        )
                 historial.append(f"paso {paso}: el juez rechazó la acción: {veredicto.razon}")
                 continue
 
