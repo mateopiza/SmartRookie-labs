@@ -824,7 +824,7 @@ def test_dato_leido_en_pantalla_se_puede_escribir_si_el_juez_lo_ve(monkeypatch):
     fake = FakeEscritorio()
     _correr_con(FakeCliente(plan, acciones), fake)
     assert [a[1] for a in fake.acciones if a[0] == "escribir"] == ["P-0066"]
-    assert vistos == ["P-0066", "X-9999"]  # el texto largo ni se consulta
+    assert sorted(set(vistos)) == ["P-0066", "X-9999"]  # el texto largo ni se consulta
 
 
 def test_prompts_identificacion_precisa_y_varios_registros_de_uno_en_uno():
@@ -868,3 +868,44 @@ def test_varios_candidatos_con_criterio_de_la_instruccion_no_es_ambiguedad():
     sin = _plan(tipo="actualizar", identificacion={"paciente": "Ana Torres"})
     assert "ambigua" in _aplicar_compuertas(
         Accion(tipo="click", x=1, y=1, compuerta="identidad", coincidencias=filas), sin, _Estado())[2].detalle
+
+
+def test_disputa_uno_contra_cero_se_resuelve_si_el_identificador_se_ve(monkeypatch):
+    _juez_que(monkeypatch, compuerta="identidad", aprobado=False, razon="identidad en disputa")
+    pedidos = []
+
+    async def visible(texto, png, cliente):
+        pedidos.append(texto)
+        return Veredicto(aprobado=texto == "C-1459", razon="")
+    monkeypatch.setattr(E, "_texto_visible_juez", visible)
+    plan = _plan(tipo="actualizar", identificacion={"paciente": "Natalia Rincón"},
+                 cambios_autorizados=[Cambio(entidad="citas", campo="hora", valor="08:40")])
+    fila = {"nombre": "Natalia Rincón", "identificador": "C-1459", "texto": "C-1459 Natalia Rincón 21/10"}
+    acciones = [Accion(tipo="click", x=1, y=1, compuerta="identidad", coincidencias=[fila]),
+                Accion(tipo="click", x=9, y=9, elemento="botón Guardar", compuerta="guardar")]
+    fake = FakeEscritorio()
+    _correr_con(FakeCliente(plan, acciones), fake)
+    assert pedidos == ["C-1459"]
+    assert [c[1:3] for c in _clics(fake)] == [(1, 1), (9, 9)]  # identidad y guardado ejecutados
+
+
+def test_disputa_con_fila_que_no_trae_la_identificacion_no_se_resuelve(monkeypatch):
+    _juez_que(monkeypatch, compuerta="identidad", aprobado=False, razon="identidad en disputa")
+    plan = _plan(tipo="actualizar", identificacion={"paciente": "Natalia Rincón"})
+    fila = {"nombre": "Otro Paciente", "identificador": "C-1459", "texto": "C-1459"}
+    fake = FakeEscritorio()
+    _correr_con(FakeCliente(plan, [Accion(tipo="click", x=1, y=1, compuerta="identidad",
+                                          coincidencias=[fila])]), fake)
+    assert _clics(fake) == []
+
+
+def test_dato_leido_en_una_pantalla_anterior_se_puede_escribir(monkeypatch):
+    async def visible(texto, png, cliente):
+        return Veredicto(aprobado=png == b"PNG1", razon="")  # solo en la primera captura
+    monkeypatch.setattr(E, "_texto_visible_juez", visible)
+    plan = _plan(tipo="actualizar", identificacion={"nombre": "Hugo Restrepo"})
+    acciones = [Accion(tipo="click", x=3, y=3, elemento="menú"),
+                Accion(tipo="escribir", x=5, y=5, texto="C-1459", elemento="campo Código")]
+    fake = _EscritorioPngNumerado()
+    _correr_con(FakeCliente(plan, acciones), fake)
+    assert [a[1] for a in fake.acciones if a[0] == "escribir"] == ["C-1459"]

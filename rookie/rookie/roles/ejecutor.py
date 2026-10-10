@@ -410,6 +410,7 @@ async def _conteo_juez(
 
 
 MAX_TEXTO_LEIDO = 40  # un dato leído (código, hora, nombre), no un párrafo
+MAX_RECIENTES = 4     # capturas en las que se busca un dato leído
 
 
 async def _texto_visible_juez(texto: str, observacion_png: bytes, cliente: ClienteModelos) -> Veredicto:
@@ -421,6 +422,42 @@ async def _texto_visible_juez(texto: str, observacion_png: bytes, cliente: Clien
         return await texto_visible(texto, observacion_png, cliente)
     except Exception as exc:  # noqa: BLE001 - sin juez no se amplía la lista blanca
         return Veredicto(aprobado=False, razon=f"juez no disponible: {type(exc).__name__}")
+
+
+async def _texto_visible_reciente(texto: str, pngs: list[bytes], cliente: ClienteModelos) -> Veredicto:
+    """El dato se leyó en una pantalla y se escribe en otra (visto: un código copiado a la
+    búsqueda de otro módulo): vale si aparece en alguna de las capturas recientes."""
+    vistos = await asyncio.gather(*(_texto_visible_juez(texto, png, cliente) for png in pngs))
+    for v in vistos:
+        if v.aprobado:
+            return v
+    return vistos[-1] if vistos else Veredicto(aprobado=False, razon="sin capturas")
+
+
+def _id_de_fila(fila: dict) -> str:
+    valor = str(fila.get("identificador") or "").strip()
+    if valor:
+        return valor
+    con_digitos = [str(v).strip() for v in fila.values() if re.search(r"\d", str(v))]
+    return max(con_digitos, key=len) if con_digitos else ""
+
+
+async def _fila_comprobada(
+    accion: Accion, plan: Plan, veredicto: Veredicto, png: bytes, cliente: ClienteModelos
+) -> bool:
+    """Disputa 1 (ejecutor) contra 0 (juez): la fila vale si contiene datos de la identificación
+    y su identificador se ve tal cual en la pantalla (el ejecutor no se la inventó)."""
+    filas = accion.coincidencias or []
+    if len(filas) != 1 or veredicto.datos_clave:
+        return False
+    texto_fila = _compacto(" ".join(str(v) for v in filas[0].values()))
+    ident = [_compacto(v) for v in plan.identificacion.values() if _compacto(v)]
+    if not ident or sum(1 for i in ident if i in texto_fila) * 2 < len(ident):
+        return False
+    identificador = _id_de_fila(filas[0])
+    if not identificador or len(identificador) > MAX_TEXTO_LEIDO:
+        return False
+    return (await _texto_visible_juez(identificador, png, cliente)).aprobado
 
 
 async def _registro_juez(plan: Plan, observacion_png: bytes, cliente: ClienteModelos) -> Veredicto:
@@ -651,6 +688,7 @@ async def _bucle(
     rechazos_juez: dict[str, int] = {}
     evidencias: list[Observacion] = []
     ultimo_click: tuple[int, int] | None = None  # campo enfocado por el paso anterior
+    recientes: list[bytes] = [obs0.png]  # últimas capturas (texto leído en otra pantalla)
     descartes = 0          # pasos seguidos en los que no se ejecutó ninguna acción
     ejecuto = True
     terminar_sin_resultado = 0
@@ -750,7 +788,7 @@ async def _bucle(
             and "\n" not in texto
             and not _texto_autorizado(texto, plan, estado.textos_leidos)
         ):
-            visto = await _texto_visible_juez(texto, obs_actual.png, cliente)
+            visto = await _texto_visible_reciente(texto, recientes[-MAX_RECIENTES:], cliente)
             log.info("task_id=%s texto fuera del plan %r: %s", task_id, texto, visto.razon)
             if visto.aprobado:
                 estado.textos_leidos.add(texto)
@@ -772,7 +810,14 @@ async def _bucle(
         if accion.compuerta in Criticas:
             veredicto = await _compuerta_juez(accion, plan, obs_actual.png, cliente)
             if not veredicto.aprobado:
-                if accion.compuerta == "identidad":
+                if accion.compuerta == "identidad" and await _fila_comprobada(
+                    accion, plan, veredicto, obs_actual.png, cliente
+                ):
+                    log.info("task_id=%s identidad: el juez no halló la fila pero su identificador "
+                             "se ve en pantalla; confirmada", task_id)
+                    historial.append(f"paso {paso}: identidad confirmada (identificador visible).")
+                    veredicto = Veredicto(aprobado=True, razon="identificador visible")
+                if not veredicto.aprobado and accion.compuerta == "identidad":
                     # la compuerta de código ya la había marcado; el juez no la confirma
                     estado.identidad_confirmada = False
                     estado.puede_crear = False
@@ -793,7 +838,7 @@ async def _bucle(
                             detalle=f"no se pudo confirmar el registro: {veredicto.razon}",
                             datos_clave=_identificadores(accion.coincidencias or []),
                         )
-                if accion.compuerta != "identidad":
+                if not veredicto.aprobado and accion.compuerta != "identidad":
                     n = rechazos_juez.get(accion.compuerta, 0) + 1
                     rechazos_juez[accion.compuerta] = n
                     if n >= MAX_RECHAZOS_JUEZ:
@@ -805,8 +850,9 @@ async def _bucle(
                             ),
                             datos_clave=list(veredicto.datos_clave),
                         )
-                historial.append(f"paso {paso}: el juez rechazó la acción: {veredicto.razon}")
-                continue
+                if not veredicto.aprobado:
+                    historial.append(f"paso {paso}: el juez rechazó la acción: {veredicto.razon}")
+                    continue
 
         # un clic sin coordenadas o en (0,0) ("por error") caería en cualquier cosa: no se hace
         if accion.tipo in {"click", "doble_click", "scroll"} and (
@@ -830,6 +876,7 @@ async def _bucle(
         # observar el efecto
         obs_prev = obs_actual
         obs_actual = await escritorio.capturar()
+        recientes = (recientes + [obs_actual.png])[-MAX_RECIENTES:]
 
         linea = (
             f"paso {paso}: {accion.tipo} '{accion.elemento}' "
