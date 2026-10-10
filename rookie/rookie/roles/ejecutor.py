@@ -490,8 +490,8 @@ async def _bucle(
                     # la compuerta de código ya la había marcado; el juez no la confirma
                     estado.identidad_confirmada = False
                     estado.puede_crear = False
+                    # el juez devuelve en datos_clave la unión de lo que vio él y el ejecutor
                     ids = list(veredicto.datos_clave)
-                    ids += [i for i in _identificadores(accion.coincidencias or []) if i not in ids]
                     if len(ids) >= 2:
                         log.info("task_id=%s identidad ambigua según el juez: %s", task_id, ids)
                         return Resultado(
