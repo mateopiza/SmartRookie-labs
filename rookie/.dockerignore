@@ -1,0 +1,22 @@
+# Secretos y entorno local: jamás dentro de la imagen
+.env
+.env.*
+.venv/
+venv/
+
+# Basura de Python / herramientas
+**/__pycache__/
+**/*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# No hace falta en runtime (y pesa)
+pruebas_e2e/
+banco/
+memoria/
+Dockerfile
+.dockerignore
+fly.toml
