@@ -82,3 +82,11 @@ colores ni coordenadas fijas: el ejecutor lee la captura con el modelo de visió
 | 7 | 16:23 | **transporte/esquema**: en evaluación terminó dos veces en ~22 s sin explicación | Plan no válido: se registra el motivo (sin `input_value`) y se reintenta una vez con el error; si vuelve a fallar, fallida «no se pudo planear: <motivo>» | a68134e |
 | 8 | 16:24 | **decisión**: la app exige un campo que la tarea no pide (p. ej. motivo de cancelación) | Prompt: no se inventa ni se elige una opción; se cancela sin guardar y fallida nombrando el campo y las opciones visibles en `datos_clave` | 7a596d2 |
 | 9 | 16:24 | **interferencia**: otro cliente mandaba tareas al mismo agente | `GET /tasks` → `{"en_curso": [...]}` (CAMBIOS-CONTRATO 16:24); el harness lo consulta antes de cada prueba y aborta (exit 2) si hay tareas ajenas | 853485d |
+
+### Fase B · corridas e incidente «tema nuevo» (detección y adaptación)
+
+| Hora | Prueba | Pasos | s | Resultado | Causa | Arreglo |
+|---|---|---|---|---|---|---|
+| 16:26 | Corrida 1 · E1 | 24 | 249 | ✘ fallida (no confirmó si existía) | **transporte (teclado)**: la detección fue el propio agente: cerró solo el diálogo de novedades y navegó Comercial › Maestros › Clientes sin problema con el tema nuevo, pero cada «escribir» dejaba «□Papelería…» concatenado; 15 pasos intentando vaciar el campo | ver 16:41 |
+| 16:30 | Corrida 1 · E2 | — | — | abortada a mano (contaminada por el mismo bug) | — | — |
+| 16:35–16:41 | sonda VNC (agente parado) | — | — | — | En el escritorio con el tema nuevo `ctrl+a`, `BackSpace`, flechas y `Tab` **no tienen efecto** (sostenidas 150 ms tampoco) y `Delete` (0xFFFF) **inserta un carácter basura**: el arreglo A2 (ctrl+a + delete) empeoró el síntoma. El ratón sí: triple clic selecciona todo el input y lo tecleado lo reemplaza («Calle vieja 12 # 3» → «Papelería Los Andes», «Ramírez» con tilde) | `escribir(x, y)` = triple clic en el campo + ctrl+a (inocuo aquí) + texto; `Delete` fuera de la lista blanca; prompt: el teclado puede no responder, usar el ratón (5901a05) |
