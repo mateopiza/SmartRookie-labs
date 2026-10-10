@@ -22,3 +22,4 @@ rookie/banco/observaciones/*
 
 # Harness local
 .claude/
+rookie/pruebas_e2e/corridas/
