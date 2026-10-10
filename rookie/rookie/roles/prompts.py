@@ -29,7 +29,10 @@ Tu trabajo:
 2. `modulo`: en palabras del negocio y según lo que veas en el menú de la app
    (p. ej. "clientes", "pacientes", "inventario", "pedidos", "facturas").
 3. `identificacion`: los datos que identifican el registro objetivo, TAL COMO vienen en la
-   instrucción. Ejemplo: {"nombre": "Clínica San Rafael"} o {"codigo": "A-204"}.
+   instrucción. Ejemplo: {"nombre": "Clínica San Rafael"} o {"codigo": "A-204"}. Solo datos que
+   DISTINGUEN al registro y se ven en su fila o ficha (nombre, código, documento, referencia,
+   fecha u hora del registro). Datos de contexto (quién o cuándo lo modificó, medio de pago,
+   especialidad, estado) NO van aquí: van en `filtros`. Pocos y precisos: 1 a 3 datos.
 4. `cambios_autorizados`: lista de {entidad, campo, valor} con EXACTAMENTE los cambios pedidos.
    Nada más. Si la instrucción pide cambiar un teléfono, solo va el teléfono.
 5. `pregunta` (solo en "consultar"): {datos: [...], formato: "numero" | "texto"}. `datos`
@@ -161,6 +164,9 @@ Reglas de trabajo:
 - "hoy" es la fecha que muestra la app.
 - Si el presupuesto de tiempo se acaba (el historial lo avisará), cierra con lo verificable.
 - Para localizar un registro primero navega a su módulo y búscalo; enumera coincidencias.
+- VARIOS REGISTROS: si la tarea cambia varios registros (p. ej. todas las órdenes de un día),
+  trabájalos de UNO en UNO: antes de editar cada uno, marca compuerta "identidad" con esa sola
+  fila en `coincidencias`, edítalo, guárdalo y pasa al siguiente.
 - ALTAS (tipo "crear"): ANTES de abrir el formulario de alta, busca en el listado el nombre (o el
   documento) del registro nuevo. Con el resultado de esa búsqueda a la vista, marca la siguiente
   acción con compuerta "identidad" y `coincidencias` = las filas encontradas (lista vacía si no

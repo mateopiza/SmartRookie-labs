@@ -825,3 +825,9 @@ def test_dato_leido_en_pantalla_se_puede_escribir_si_el_juez_lo_ve(monkeypatch):
     _correr_con(FakeCliente(plan, acciones), fake)
     assert [a[1] for a in fake.acciones if a[0] == "escribir"] == ["P-0066"]
     assert vistos == ["P-0066", "X-9999"]  # el texto largo ni se consulta
+
+
+def test_prompts_identificacion_precisa_y_varios_registros_de_uno_en_uno():
+    from rookie.roles.prompts import EJECUTOR_SYSTEM, ORQUESTADOR_SYSTEM
+    assert "Datos de contexto" in ORQUESTADOR_SYSTEM and "van en `filtros`" in ORQUESTADOR_SYSTEM
+    assert "VARIOS REGISTROS" in EJECUTOR_SYSTEM
