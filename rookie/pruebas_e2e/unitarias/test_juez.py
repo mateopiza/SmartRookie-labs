@@ -558,3 +558,24 @@ def test_identidad_con_criterio_acepta_la_fila_elegida_entre_las_que_ve_el_juez(
         ("1019876543", "CL-0019 Ana Torres 1019876543 Cali"),
     ))
     assert not _run(juzgar_compuerta(acc, sin, PNG, cli2)).aprobado  # E5 sigue fallando
+
+
+def test_final_escritura_tolera_un_campo_no_visible_si_el_resto_se_ve_bien():
+    plan = _plan(tipo="crear", cambios_autorizados=[
+        Cambio(entidad="citas", campo="nombre", valor="Natalia Rincón"),
+        Cambio(entidad="citas", campo="fecha", valor="2026-10-21"),
+        Cambio(entidad="citas", campo="hora", valor="08:40")])
+    res = Resultado(estado="terminada", escrituras=list(plan.cambios_autorizados))
+
+    def lect(nombre_visible, hora):
+        return {"_LecturaFinal": {"valores": [
+            {"clave": "nombre", "visible": nombre_visible, "valor": "Natalia Rincón" if nombre_visible else ""},
+            {"clave": "fecha", "visible": True, "valor": "21/10/2026"},
+            {"clave": "hora", "visible": True, "valor": hora}], "evidencia": True, "razon": ""}}
+    assert _run(veredicto_final(res, plan, PNG, FakeCliente(lect(False, "08:40")))).aprobado
+    assert not _run(veredicto_final(res, plan, PNG, FakeCliente(lect(False, "08:45")))).aprobado
+    solo_uno = {"_LecturaFinal": {"valores": [
+        {"clave": "nombre", "visible": False, "valor": ""},
+        {"clave": "fecha", "visible": False, "valor": ""},
+        {"clave": "hora", "visible": True, "valor": "08:40"}], "evidencia": True, "razon": ""}}
+    assert not _run(veredicto_final(res, plan, PNG, FakeCliente(solo_uno))).aprobado

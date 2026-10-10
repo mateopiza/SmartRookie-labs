@@ -651,15 +651,24 @@ async def _final_escritura(resultado: Resultado, plan: Plan, png: bytes, cliente
     if lectura is None:
         return _no_disponible(False)
 
+    # Un campo que la pantalla final no muestra no tumba el resultado (visto en evaluación: alta
+    # verificada rechazada solo por «nombre: no visible»). Sí lo tumban: un valor visible
+    # distinto, la falta de evidencia o que se vean correctos menos de la mitad de los esperados.
     fallos: list[str] = []
     leidos: list[str] = []
+    no_visibles: list[str] = []
+    correctos = 0
     for i, c in enumerate(esperadas):
         v = _buscar(lectura.valores, c.campo, i)
-        if v is None or not v.visible:
-            fallos.append(f"{c.campo}: no visible")
+        if v is None or not v.visible or not _compacto(v.valor):
+            no_visibles.append(f"{c.campo}: no visible")
         elif not _igual(c.valor, v.valor):
             fallos.append(f"{c.campo}: en pantalla {v.valor!r}")
             leidos.append(f"{c.campo}: {v.valor}")
+        else:
+            correctos += 1
+    if esperadas and correctos * 2 < len(esperadas):
+        fallos.extend(no_visibles)
     if not lectura.evidencia:
         fallos.append("la pantalla no muestra el registro guardado")
     if fallos:
