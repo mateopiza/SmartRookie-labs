@@ -33,7 +33,9 @@ _log = logging.getLogger("rookie.computer_use")
 
 # Temporizaciones (segundos)
 _ESPERA_FRAME = 0.150         # entre capturas para detectar frame estable
-_MAX_ESTABLE = 1.5            # tope de espera de frame estable
+_MIN_ESTABLE = 1.0            # la app tarda hasta 1 s en repintar: antes, dos frames iguales
+                              # siguen siendo la pantalla vieja (el puntero sí se mueve al instante)
+_MAX_ESTABLE = 2.0            # tope de espera de frame estable
 _HOLD_MIN_MS = 120            # clic por debajo de esto se ignora
 _HOLD_DEFAULT_MS = 150
 _ENTRE_DOBLE = 0.080         # entre los dos clics de un doble clic
@@ -99,7 +101,7 @@ class Escritorio:
             await asyncio.sleep(min(_ESPERA_FRAME, max(0.0, restante)))
             self._guardias.comprobar()
             _, h_cur = await self._rfb.capturar_frame()
-            if h_cur == h_prev:
+            if h_cur == h_prev and (time.monotonic() - t0) >= _MIN_ESTABLE:
                 estable_tras_ms = int((time.monotonic() - t0) * 1000)
                 png = self._rfb.png_actual()
                 h_final = h_cur

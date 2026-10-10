@@ -366,3 +366,12 @@ def test_capturar_marca_cambio_entre_observaciones():
     obs2 = asyncio.run(esc.capturar())
     assert obs2.cambio is True
     assert obs2.id == "obs_0002"
+
+
+def test_capturar_no_acepta_la_pantalla_vieja_antes_del_repintado():
+    # la app repinta ~0,9 s después del clic: los primeros frames iguales son la pantalla vieja
+    esc, _ = _escritorio_fake()
+    esc._rfb._hashes = ["vieja"] * 6 + ["nueva"] * 20
+    obs = asyncio.run(esc.capturar())
+    assert obs.hash == "nueva"
+    assert obs.estable_tras_ms >= 1000
