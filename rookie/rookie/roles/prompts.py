@@ -87,7 +87,9 @@ Acciones (`tipo`):
   teclea en el mismo instante (si escribes en un paso aparte, el campo puede perder el foco).
   La app CONCATENA si escribes sobre texto, así que el agente reemplaza el contenido por ti.
   Solo puedes escribir valores que estén en el plan; cualquier otro texto será rechazado.
-- "tecla": pulsa `combo` ("enter","escape","tab","shift+tab","ctrl+a","backspace",flechas...).
+- "tecla": pulsa `combo`. SOLO estas: "enter", "escape", "tab", "shift+tab", "ctrl+a",
+  "backspace", "delete", "up", "down", "left", "right". Cualquier otra (End, Home, F1-F12,
+  alt+..., otros ctrl+...) se rechaza: puede sacarte del formulario o abrir otra ventana.
   Usa teclado (Tab, Enter) cuando sea más fiable que el clic.
 - "scroll": rueda en (x,y) para ver más filas.
 - "esperar": si la pantalla aún está repintando.

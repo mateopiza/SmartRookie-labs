@@ -143,6 +143,27 @@ def _compuerta_inferida(accion: Accion, plan: Plan) -> Accion:
     return accion
 
 
+# Teclas que el ejecutor puede pulsar. Cualquier otra (End, Home, F1–F12, alt+…, ctrl+… salvo
+# ctrl+a) se rechaza: End sacó al agente de un formulario y una tecla de función abrió DevTools.
+TECLAS_PERMITIDAS = {
+    "enter", "escape", "tab", "shift+tab", "ctrl+a", "backspace", "delete",
+    "up", "down", "left", "right",
+}
+_ALIAS_TECLA = {
+    "return": "enter", "intro": "enter", "esc": "escape", "control": "ctrl", "supr": "delete",
+    "del": "delete", "arrowup": "up", "arrowdown": "down", "arrowleft": "left",
+    "arrowright": "right",
+}
+
+
+def _tecla_normalizada(combo: str | None) -> str | None:
+    """El combo en forma canónica si está en la lista blanca; None si no se permite."""
+    partes = [p.strip().lower().replace(" ", "").replace("_", "") for p in (combo or "").split("+")]
+    partes = [_ALIAS_TECLA.get(p, p) for p in partes if p]
+    canonico = "+".join(partes)
+    return canonico if canonico in TECLAS_PERMITIDAS else None
+
+
 def _campo_de(accion: Accion, plan: Plan) -> str:
     if len(plan.cambios_autorizados) == 1:
         return _norm(plan.cambios_autorizados[0].campo)
@@ -174,6 +195,18 @@ def _aplicar_compuertas(
             (
                 f"RECHAZADO: el texto {accion.texto!r} no está en los textos permitidos del plan; "
                 "solo puedes escribir valores autorizados."
+            ),
+            None,
+        )
+
+    # a. Lista blanca de teclas
+    if accion.tipo == "tecla" and _tecla_normalizada(accion.combo) is None:
+        return (
+            False,
+            (
+                f"RECHAZADO: la tecla {accion.combo!r} no está permitida (puede sacarte del "
+                "formulario o abrir otra ventana). Solo: enter, escape, tab, shift+tab, ctrl+a, "
+                "backspace, delete y flechas."
             ),
             None,
         )
@@ -362,7 +395,9 @@ async def _ejecutar_primitiva(escritorio: Escritorio, accion: Accion) -> None:
             await asyncio.sleep(0.3)
         await escritorio.escribir(accion.texto or "", reemplazar=True)
     elif t == "tecla":
-        await escritorio.tecla(accion.combo or "")
+        combo = _tecla_normalizada(accion.combo)
+        if combo is not None:  # las compuertas ya rechazaron las demás; defensa en profundidad
+            await escritorio.tecla(combo)
     elif t == "scroll":
         await escritorio.scroll(x, y, abajo=True)
     elif t == "esperar":

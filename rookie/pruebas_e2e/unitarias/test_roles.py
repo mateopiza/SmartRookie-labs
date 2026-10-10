@@ -674,3 +674,17 @@ def test_valor_de_un_cambio_autorizado_se_puede_escribir_aunque_falte_en_textos_
     assert _aplicar_compuertas(ok, plan, _Estado())[0] is True
     otro = Accion(tipo="escribir", texto="3009999999", x=1, y=1)
     assert _aplicar_compuertas(otro, plan, _Estado())[0] is False
+
+
+def test_solo_teclas_de_la_lista_blanca_llegan_al_escritorio():
+    plan = _plan(tipo="consultar", modulo="facturas")
+    for prohibida in ("end", "home", "f12", "alt+f4", "ctrl+w", "ctrl+shift+i"):
+        permitido, motivo, terminal = _aplicar_compuertas(
+            Accion(tipo="tecla", combo=prohibida), plan, _Estado())
+        assert permitido is False and terminal is None and "no está permitida" in motivo
+    for ok in ("enter", "Escape", "esc", "shift+tab", "ctrl+a", "Control+A", "delete", "down"):
+        assert _aplicar_compuertas(Accion(tipo="tecla", combo=ok), plan, _Estado())[0] is True
+    acciones = [Accion(tipo="tecla", combo="End"), Accion(tipo="tecla", combo="ESC")]
+    fake = FakeEscritorio()
+    _correr_con(FakeCliente(plan, acciones), fake)
+    assert [a for a in fake.acciones if a[0] == "tecla"] == [("tecla", "escape")]
