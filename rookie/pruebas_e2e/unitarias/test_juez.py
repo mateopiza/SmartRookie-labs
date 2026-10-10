@@ -595,3 +595,24 @@ def test_conteo_en_cero_en_todas_las_paginas_lee_el_valor_directo():
     assert "no descartes la fila" in cli.llamadas[0]["texto"]
     lecturas["_LecturaFinal"]["valores"][0]["valor"] = "45"
     assert not _run(J.verificar_conteo(res, plan, [PNG, PNG, PNG], FakeCliente(lecturas))).aprobado
+
+
+def test_identidad_sin_identificacion_no_consulta_y_aprueba():
+    cli = FakeCliente(_lect_identidad(("F-1", "F-1"), ("F-2", "F-2")))
+    acc = Accion(tipo="click", compuerta="identidad", coincidencias=[{"nombre": "x", "identificador": "F-1", "texto": "F-1"}])
+    v = _run(juzgar_compuerta(acc, _plan(tipo="crear", modulo="facturas"), PNG, cli))
+    assert v.aprobado and cli.llamadas == []
+
+
+def test_identidad_con_criterio_acepta_candidatos_enumerados_y_no_da_ambiguedad():
+    filas = (("F-2320", "F-2320 Marisol Anulada"), ("F-2319", "F-2319 Wilson Anulada"), ("F-2283", "F-2283 Otro"))
+    acc = Accion(tipo="click", compuerta="identidad", coincidencias=[
+        {"nombre": "Marisol", "identificador": "F-2320", "texto": "F-2320 Marisol Anulada"},
+        {"nombre": "Wilson", "identificador": "F-2319", "texto": "F-2319 Wilson Anulada"}])
+    plan = _plan(tipo="crear", modulo="facturas", identificacion={"estado": "Anulada"},
+                 filtros={"criterio": "la que no tiene factura de reemplazo"})
+    assert _run(juzgar_compuerta(acc, plan, PNG, FakeCliente(_lect_identidad(*filas)))).aprobado
+    otra = Accion(tipo="click", compuerta="identidad", coincidencias=[
+        {"nombre": "Nadie", "identificador": "F-9999", "texto": "F-9999"}])
+    v = _run(juzgar_compuerta(otra, plan, PNG, FakeCliente(_lect_identidad(*filas))))
+    assert not v.aprobado and v.datos_clave == []  # disputa, no «ambigua»

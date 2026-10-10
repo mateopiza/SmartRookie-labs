@@ -311,6 +311,10 @@ def _emparejan(ejecutor: list[dict[str, str]], juez: list[_Fila]) -> bool:
 
 
 async def _identidad(accion: Accion, plan: Plan, png: bytes, cliente: ClienteModelos) -> Veredicto:
+    if not any(_compacto(v) for v in plan.identificacion.values()):
+        # sin identificación no hay con qué comparar: el juez listaría todo el listado y lo
+        # tomaría por ambigüedad (visto: 16 facturas). Manda la compuerta de código.
+        return Veredicto(aprobado=True, razon="sin identificación explícita: nada que comparar")
     pregunta = (
         f"Identificación buscada: {_describir(plan.identificacion)}.\n"
         "¿Cuántas filas o registros visibles en la pantalla coinciden con esa identificación? "
@@ -338,13 +342,18 @@ async def _identidad(accion: Accion, plan: Plan, png: bytes, cliente: ClienteMod
     criterio = next((v for k, v in plan.filtros.items() if "criterio" in _norm(k) and _norm(v)), None)
     if (
         criterio
-        and len(del_ejecutor) == 1
+        and del_ejecutor
         and lectura.filas
-        and any(_misma_fila(del_ejecutor[0], f) for f in lectura.filas)
+        and all(any(_misma_fila(e, f) for f in lectura.filas) for e in del_ejecutor)
     ):
+        # con un criterio de elección, el ejecutor enumera candidatos (o la fila elegida) que el
+        # juez también ve: no es ambigüedad (visto: 2 facturas anuladas, elegir la sin reemplazo)
         return Veredicto(
             aprobado=True,
-            razon=f"registro elegido por el criterio de la tarea entre {len(lectura.filas)} candidato(s)",
+            razon=(
+                f"{len(del_ejecutor)} fila(s) del ejecutor entre {len(lectura.filas)} candidato(s) "
+                "para aplicar el criterio de la tarea"
+            ),
         )
     if lectura.cantidad != len(lectura.filas):
         razon = (
@@ -365,7 +374,9 @@ async def _identidad(accion: Accion, plan: Plan, png: bytes, cliente: ClienteMod
     # Un 1 contra 1 distinto o un 1 contra 0 es una disputa: el ejecutor vuelve a leer (en
     # evaluación, juntar los ids de un 1 contra 1 terminó tareas como «ambiguas» sin serlo).
     # (0 del ejecutor contra ≥1 del juez antes de un alta es un posible duplicado: se nombra)
-    if max(len(lectura.filas), len(del_ejecutor)) >= 2 or (not del_ejecutor and lectura.filas):
+    if not criterio and (
+        max(len(lectura.filas), len(del_ejecutor)) >= 2 or (not del_ejecutor and lectura.filas)
+    ):
         return Veredicto(aprobado=False, razon=razon, datos_clave=_dedup(ids_ejecutor + ids_juez))
     return Veredicto(aprobado=False, razon=razon)
 
