@@ -52,3 +52,11 @@ Cada entrada: fecha y hora, fase, qué cambia, por qué y si rompe algo.
 - **Por qué:** en la Fase H otro cliente mandaba tareas al mismo agente local y contaminaba las
   pruebas. El harness consulta esta ruta antes de cada prueba y aborta (exit 2) si hay tareas en
   curso ajenas. Contra un agente sin la ruta (404) avisa y sigue.
+
+## 2026-10-10 17:58 · Fase H2 · `GET /tasks/{id}` de una tarea desconocida ⇒ `fallida` (antes 404)
+
+- **Qué:** responde 200 `{"estado": "fallida", "resumen": "tarea perdida: el agente se reinició o
+  la tarea no existe"}` en vez de 404. Sigue exigiendo el token.
+- **Por qué:** el estado vive en memoria. Un redespliegue a las 22:50 UTC reinició el contenedor con
+  la tarea `03ea76e5327a` en curso y el evaluador recibió 404 cada 5 s hasta agotar los 5 minutos.
+  Así la tarea se cierra en la primera consulta (cuenta igual como fallida, pero sin esperar).

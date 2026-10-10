@@ -1,4 +1,4 @@
-"""API: auth Bearer, /health, POST /tasks inmediato, GET /tasks/{id}, 404 y 422 sin eco del body."""
+"""API: auth Bearer, /health, POST /tasks inmediato, GET /tasks/{id} (desconocida ⇒ fallida), 422 sin eco del body."""
 
 import asyncio
 import time
@@ -84,7 +84,9 @@ async def test_get_tarea_terminada_y_404():
         await asyncio.sleep(0.05)
         e = (await c.get(f"/tasks/{tid}", headers=AUTH)).json()
         assert e["estado"] == "terminada" and e["resumen"].startswith("respuesta: 45")
-        assert (await c.get("/tasks/no-existe", headers=AUTH)).status_code == 404
+        r = await c.get("/tasks/no-existe", headers=AUTH)
+        assert r.status_code == 200 and r.json()["estado"] == "fallida"
+        assert "tarea perdida" in r.json()["resumen"]
 
 
 async def test_ejecutor_de_relleno_mientras_no_existe_el_real():

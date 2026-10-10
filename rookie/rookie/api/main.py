@@ -92,7 +92,12 @@ def crear_app(motor: Motor | None = None) -> FastAPI:
     async def estado_tarea(task_id: str, request: Request) -> EstadoTarea:
         estado = request.app.state.motor.estado(task_id)
         if estado is None:
-            raise HTTPException(status_code=404, detail="tarea no encontrada")
+            # El estado vive en memoria: tras un reinicio (p. ej. un redespliegue) el evaluador
+            # seguía recibiendo 404 hasta agotar los 5 minutos. Una tarea desconocida se cierra.
+            return EstadoTarea(
+                estado="fallida",
+                resumen="tarea perdida: el agente se reinició o la tarea no existe",
+            )
         return estado
 
     app.include_router(rutas)
