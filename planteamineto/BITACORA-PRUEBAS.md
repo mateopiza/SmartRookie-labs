@@ -63,3 +63,22 @@ Notas:
 - El formulario de un alta guardada se queda abierto con `Código: CL-0141`; NO es un borrador
   (antes de guardar el formulario «Nuevo cliente» no tiene código). `__check` sin duplicados ✔.
 - Nunca usar `pkill -f` con un patrón que aparezca en la propia línea de comando: mata el shell.
+
+## Fase H2 · arreglar primero, probar después (10-oct-2026, desde 16:17)
+
+La app cambió (interfaz, colores, diálogo de novedades, botón «Filtrar», Exportar movido). Nada de
+colores ni coordenadas fijas: el ejecutor lee la captura con el modelo de visión.
+
+### Fase A · arreglos (cada uno con test y commit propio; `pytest -q` 192 ✔)
+
+| # | Hora | Causa (evaluación) | Arreglo | Commit |
+|---|---|---|---|---|
+| 1 | 16:25 | **decisión**: `End` sacó al agente de un formulario; una tecla de función abrió DevTools | Lista blanca de teclas por código (`TECLAS_PERMITIDAS`: enter, escape, tab, shift+tab, ctrl+a, backspace, delete, flechas; alias esc/return/control). Otra tecla ⇒ «RECHAZADO» con motivo en el historial; la primitiva solo recibe el combo canónico | aacfbef |
+| 2 | 16:30 | **percepción/tiempo**: una dirección quedó concatenada y no se pudo borrar | `escribir(reemplazar=True)`: ctrl+a, **delete** y luego el texto (el ejecutor ya hace el clic en el campo en la misma primitiva). Prompt: si se ve concatenado, repetir «escribir» en ese campo; nunca guardar un valor distinto (el juez de guardar lo vigila) | 92bbbfa |
+| 3 | 16:35 | **decisión**: diálogo de novedades inesperado | Regla genérica en el prompt: informativo ⇒ se cierra (Entendido / Aceptar / Cerrar / X) y no cuenta como acción fuera de la tarea; confirmación de un cambio no autorizado ⇒ Cancelar / Escape | c3d87e9 |
+| 4 | 16:45 | **compuerta**: un clic en Guardar abrió la ficha CL-0046 | Tras ejecutar guardar/crear, `juez.registro_tras_guardar` lee qué registro muestra la pantalla (llamada real: 4,7 s y 3,2 s, ambos veredictos correctos). Si es OTRO: historial «RECHAZADO/ALERTA», se revoca la identidad confirmada y el guardado del campo; guardar exige releer el registro (compuerta identidad + juez de guardar). Sin juez no se alerta | 226e66f |
+| 5 | 16:50 | **tiempo**: lecturas del juez de 12–15 s en pantallas cargadas | `juez.TIMEOUT_S` 20 → 30 s; juez no disponible ⇒ se rechaza lo irreversible (sin cambio) | 071dfd0 |
+| 6 | 16:55 | **compuerta**: «Consultorio 305» rechazado como «305» | `_igual` acepta el esperado como palabra(s) completa(s) al final tras una etiqueta de 1–2 palabras sin dígitos; «Carrera 15Calle 80…» y «Carrera 15 Calle 80…» siguen rechazados | d928940 |
+| 7 | 17:00 | **transporte/esquema**: en evaluación terminó dos veces en ~22 s sin explicación | Plan no válido: se registra el motivo (sin `input_value`) y se reintenta una vez con el error; si vuelve a fallar, fallida «no se pudo planear: <motivo>» | a68134e |
+| 8 | 17:05 | **decisión**: la app exige un campo que la tarea no pide (p. ej. motivo de cancelación) | Prompt: no se inventa ni se elige una opción; se cancela sin guardar y fallida nombrando el campo y las opciones visibles en `datos_clave` | 7a596d2 |
+| 9 | 17:10 | **interferencia**: otro cliente mandaba tareas al mismo agente | `GET /tasks` → `{"en_curso": [...]}` (CAMBIOS-CONTRATO 17:00); el harness lo consulta antes de cada prueba y aborta (exit 2) si hay tareas ajenas | 853485d |
