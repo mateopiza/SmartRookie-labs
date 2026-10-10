@@ -33,9 +33,12 @@ _log = logging.getLogger("rookie.computer_use")
 
 # Temporizaciones (segundos)
 _ESPERA_FRAME = 0.150         # entre capturas para detectar frame estable
-_MIN_ESTABLE = 1.0            # la app tarda hasta 1 s en repintar: antes, dos frames iguales
-                              # siguen siendo la pantalla vieja (el puntero sí se mueve al instante)
-_MAX_ESTABLE = 2.0            # tope de espera de frame estable
+# Medido en el escritorio real (Fase H): del clic al cambio visible pasan de 0,5 a 4,2 s, y el
+# puntero y el repintado llegan con ~0,4 s de diferencia. Una captura "estable" a los 150 ms o a
+# 1 s traía a menudo la pantalla VIEJA.
+_VENTANA_ESTABLE = 0.6        # tras el último cambio, tanto tiempo sin cambios = frame estable
+_MAX_SIN_CAMBIO = 4.5         # si nada cambia en este tiempo, la acción no tuvo efecto visible
+_MAX_ESTABLE = 7.0            # tope absoluto de espera
 _HOLD_MIN_MS = 120            # clic por debajo de esto se ignora
 _HOLD_DEFAULT_MS = 150
 _ENTRE_DOBLE = 0.080         # entre los dos clics de un doble clic
@@ -88,27 +91,37 @@ class Escritorio:
 
     # -- captura -------------------------------------------------------------
 
-    async def capturar(self) -> Observacion:
+    async def capturar(self, *, esperar_cambio: bool = True) -> Observacion:
+        """Captura tras una acción: espera a que la pantalla cambie respecto de la observación
+        anterior y luego a que se quede quieta `_VENTANA_ESTABLE`; sin cambio en
+        `_MAX_SIN_CAMBIO`, devuelve la pantalla tal cual (la acción no tuvo efecto visible).
+        `esperar_cambio=False` (sin acción previa, p. ej. al verificar): solo espera quietud."""
         self._guardias.comprobar()
         t0 = time.monotonic()
+        referencia = self._ultimo_hash if esperar_cambio else None
         _, h_prev = await self._rfb.capturar_frame()
-        estable_tras_ms = int(_MAX_ESTABLE * 1000)
         png = self._rfb.png_actual()
         h_final = h_prev
+        cambio_visto = referencia is None or h_prev != referencia
+        ultimo_cambio = time.monotonic()
+        estable_tras_ms = int(_MAX_ESTABLE * 1000)
 
         while (time.monotonic() - t0) < _MAX_ESTABLE:
-            restante = _MAX_ESTABLE - (time.monotonic() - t0)
-            await asyncio.sleep(min(_ESPERA_FRAME, max(0.0, restante)))
+            await asyncio.sleep(_ESPERA_FRAME)
             self._guardias.comprobar()
             _, h_cur = await self._rfb.capturar_frame()
-            if h_cur == h_prev and (time.monotonic() - t0) >= _MIN_ESTABLE:
-                estable_tras_ms = int((time.monotonic() - t0) * 1000)
-                png = self._rfb.png_actual()
-                h_final = h_cur
-                break
-            h_prev = h_cur
+            ahora = time.monotonic()
+            if h_cur != h_prev:
+                ultimo_cambio = ahora
+                h_prev = h_cur
+            if referencia is not None and h_cur != referencia:
+                cambio_visto = True
             png = self._rfb.png_actual()
             h_final = h_cur
+            quieto = (ahora - ultimo_cambio) >= _VENTANA_ESTABLE
+            if quieto and (cambio_visto or (ahora - t0) >= _MAX_SIN_CAMBIO):
+                estable_tras_ms = int((ahora - t0) * 1000)
+                break
 
         cambio = self._ultimo_hash is not None and h_final != self._ultimo_hash
         self._ultimo_hash = h_final

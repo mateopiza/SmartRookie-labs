@@ -368,10 +368,29 @@ def test_capturar_marca_cambio_entre_observaciones():
     assert obs2.id == "obs_0002"
 
 
-def test_capturar_no_acepta_la_pantalla_vieja_antes_del_repintado():
-    # la app repinta ~0,9 s después del clic: los primeros frames iguales son la pantalla vieja
+def test_capturar_espera_el_repintado_aunque_tarde_mas_de_2_s():
+    # medido: del clic al cambio visible pasan 0,5-4,2 s; antes se devolvía la pantalla vieja
     esc, _ = _escritorio_fake()
-    esc._rfb._hashes = ["vieja"] * 6 + ["nueva"] * 20
+    esc._ultimo_hash = "vieja"  # la observación anterior a la acción
+    esc._rfb._hashes = ["vieja"] * 16 + ["puntero", "puntero", "nueva"] + ["nueva"] * 10
     obs = asyncio.run(esc.capturar())
-    assert obs.hash == "nueva"
-    assert obs.estable_tras_ms >= 1000
+    assert obs.hash == "nueva" and obs.cambio is True
+    assert obs.estable_tras_ms >= 2500
+
+
+def test_capturar_sin_cambio_se_rinde_al_tope(monkeypatch):
+    from rookie.computer_use import primitivas as P
+    monkeypatch.setattr(P, "_MAX_SIN_CAMBIO", 0.5)
+    esc, _ = _escritorio_fake()
+    esc._ultimo_hash = "igual"
+    esc._rfb._hashes = ["igual"] * 40
+    obs = asyncio.run(esc.capturar())
+    assert obs.cambio is False and obs.estable_tras_ms < 1500
+
+
+def test_capturar_sin_esperar_cambio_solo_espera_quietud():
+    esc, _ = _escritorio_fake()
+    esc._ultimo_hash = "igual"
+    esc._rfb._hashes = ["igual"] * 40
+    obs = asyncio.run(esc.capturar(esperar_cambio=False))
+    assert obs.estable_tras_ms < 1500

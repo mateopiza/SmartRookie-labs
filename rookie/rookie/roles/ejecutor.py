@@ -395,7 +395,7 @@ async def _verificar_final(
 ) -> Resultado:
     try:
         guardias.comprobar()
-        obs = await escritorio.capturar()
+        obs = await escritorio.capturar(esperar_cambio=False)  # sin acción previa
     except (PlazoAgotado, TareaCerrada):
         return propuesto or Resultado(estado="fallida", detalle="no se pudo verificar: tarea cerrada")
 

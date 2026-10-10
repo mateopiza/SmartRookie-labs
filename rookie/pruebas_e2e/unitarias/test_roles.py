@@ -89,7 +89,7 @@ class FakeEscritorio:
         self._n = 0
         self._prev_hash = None
 
-    async def capturar(self):
+    async def capturar(self, **kw):
         if self.guardias:
             self.guardias.comprobar()
         self._n += 1
@@ -500,7 +500,7 @@ def test_crear_sin_identificacion_usa_nombre_de_los_cambios_y_no_la_ciudad():
 
 
 class _EscritorioPngNumerado(FakeEscritorio):
-    async def capturar(self):
+    async def capturar(self, **kw):
         obs = await super().capturar()
         return Observacion(id=obs.id, png=f"PNG{self._n}".encode(), hash=obs.hash,
                            cambio=obs.cambio, estable_tras_ms=0)
