@@ -453,3 +453,93 @@ def test_compuerta_juez_con_excepcion_rechaza_irreversibles_y_aprueba_identidad(
 
     assert asyncio.run(_COMPUERTA_JUEZ_REAL(crear, plan, b"PNG", None)).aprobado is False
     assert asyncio.run(_COMPUERTA_JUEZ_REAL(identidad, plan, b"PNG", None)).aprobado is True
+
+
+# ──────────────────────── Fase H: anti-duplicado y juez final ────────────────
+
+def _plan_alta():
+    return _plan(
+        tipo="crear", identificacion={"nombre": "Papelería Los Andes", "nit": "901234567"},
+        textos_permitidos=["Papelería Los Andes", "901234567"],
+        cambios_autorizados=[Cambio(entidad="clientes", campo="nombre", valor="Papelería Los Andes"),
+                             Cambio(entidad="clientes", campo="ciudad", valor="Pereira")],
+    )
+
+
+def test_crear_con_registro_ya_existente_falla_nombrando_el_identificador():
+    accion = Accion(tipo="click", compuerta="identidad", coincidencias=[
+        {"codigo": "CL-0141", "nombre": "Papelería Los Andes", "nit": "901234567"}])
+    estado = _Estado()
+    permitido, _m, terminal = _aplicar_compuertas(accion, _plan_alta(), estado)
+    assert permitido is False and estado.puede_crear is False
+    assert terminal is not None and terminal.estado == "fallida"
+    assert "ya existe" in terminal.detalle
+    assert "CL-0141" in " ".join(terminal.datos_clave)
+
+
+def test_crear_con_coincidencia_parcial_no_es_duplicado():
+    # búsqueda por subcadena: 'Los Andes Norte' contiene el nombre pero es otro registro
+    accion = Accion(tipo="click", compuerta="identidad", coincidencias=[
+        {"codigo": "CL-0009", "nombre": "Papelería Los Andes Norte", "ciudad": "Pereira"}])
+    estado = _Estado()
+    permitido, _m, terminal = _aplicar_compuertas(accion, _plan_alta(), estado)
+    assert permitido is True and terminal is None
+    assert estado.puede_crear is True
+
+
+def test_crear_sin_identificacion_usa_nombre_de_los_cambios_y_no_la_ciudad():
+    plan = _plan(tipo="crear", cambios_autorizados=[
+        Cambio(entidad="clientes", campo="nombre", valor="Papelería Los Andes"),
+        Cambio(entidad="clientes", campo="ciudad", valor="Pereira")])
+    otra = Accion(tipo="click", compuerta="identidad",
+                  coincidencias=[{"nombre": "Ferretería Sur", "ciudad": "Pereira"}])
+    assert _aplicar_compuertas(otra, plan, _Estado())[2] is None
+    misma = Accion(tipo="click", compuerta="identidad",
+                   coincidencias=[{"nombre": "papeleria los andes", "codigo": "CL-0141"}])
+    assert "ya existe" in _aplicar_compuertas(misma, plan, _Estado())[2].detalle
+
+
+class _EscritorioPngNumerado(FakeEscritorio):
+    async def capturar(self):
+        obs = await super().capturar()
+        return Observacion(id=obs.id, png=f"PNG{self._n}".encode(), hash=obs.hash,
+                           cambio=obs.cambio, estable_tras_ms=0)
+
+
+def test_juez_final_ve_la_captura_sobre_la_que_se_decidio_terminar(monkeypatch):
+    vistos: list[bytes] = []
+
+    async def juez_final(resultado, plan, png, cliente):
+        vistos.append(png)
+        return Veredicto(aprobado=True, razon="ok")
+    monkeypatch.setattr(E, "_veredicto_final_juez", juez_final)
+    plan = _plan_alta()
+    acciones = [
+        Accion(tipo="click", compuerta="identidad", coincidencias=[], x=1, y=1, elemento="buscar"),
+        Accion(tipo="click", compuerta="crear", x=2, y=2, elemento="botón Guardar"),
+        Accion(tipo="terminar", resultado=Resultado(estado="terminada", escrituras=list(
+            plan.cambios_autorizados))),
+    ]
+    fake = _EscritorioPngNumerado()
+    resultado, _ = _correr_con(FakeCliente(plan, acciones), fake)
+    assert resultado.estado == "terminada"
+    # obs0 + 2 acciones = PNG3 al terminar; la verificación captura PNG4 (sin el aviso efímero)
+    assert vistos == [b"PNG3"]
+
+
+def test_identidad_con_coincidencias_vacias_se_rechaza_sin_terminar():
+    accion = Accion(tipo="click", compuerta="identidad", coincidencias=[{}])
+    permitido, motivo, terminal = _aplicar_compuertas(accion, _plan_alta(), _Estado())
+    assert permitido is False and terminal is None
+    assert "coincidencias vacías" in motivo
+
+
+def test_esquema_de_coincidencias_anuncia_campos_fijos_al_modelo():
+    # con dict[str, str] el modo estricto del proveedor devuelve objetos vacíos
+    esquema = Accion.model_json_schema()["properties"]["coincidencias"]
+    items = esquema["anyOf"][0]["items"]
+    assert items["additionalProperties"] is False
+    assert set(items["required"]) == {"nombre", "identificador", "texto"}
+    a = Accion.model_validate({"tipo": "click", "compuerta": "identidad", "coincidencias": [
+        {"nombre": "Ana Torres", "identificador": "52345678", "texto": "Ana Torres 52345678"}]})
+    assert a.coincidencias[0]["identificador"] == "52345678"

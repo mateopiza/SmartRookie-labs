@@ -5,9 +5,9 @@ La contraseña del escritorio es SecretStr: no aparece en repr, str ni model_dum
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, SecretStr, WithJsonSchema
 
 
 class EscritorioEntrada(BaseModel):
@@ -61,6 +61,25 @@ class Resultado(BaseModel):
     detalle: str = ""
 
 
+# El esquema JSON estricto que se envía al modelo no admite claves libres: con
+# `dict[str, str]` el proveedor devuelve objetos vacíos (`[{}]`). Se anuncian campos fijos y
+# Python sigue validando un dict[str, str] (las claves fijas son strings).
+_ESQUEMA_COINCIDENCIA = {
+    "type": "object",
+    "properties": {
+        "nombre": {"type": "string"},
+        "identificador": {"type": "string"},  # código, documento o id que distingue la fila
+        "texto": {"type": "string"},  # la fila completa tal como se ve
+    },
+    "required": ["nombre", "identificador", "texto"],
+    "additionalProperties": False,
+}
+Coincidencias = Annotated[
+    list[dict[str, str]] | None,
+    WithJsonSchema({"anyOf": [{"type": "array", "items": _ESQUEMA_COINCIDENCIA}, {"type": "null"}]}),
+]
+
+
 class Accion(BaseModel):
     tipo: Literal["click", "doble_click", "escribir", "tecla", "scroll", "esperar", "terminar"]
     x: int | None = None
@@ -70,7 +89,7 @@ class Accion(BaseModel):
     elemento: str = ""  # texto visible del objetivo ("botón Guardar")
     razon: str = ""
     compuerta: Literal["identidad", "guardar", "crear", "exportar", "eliminar"] | None = None
-    coincidencias: list[dict[str, str]] | None = None  # obligatorio cuando compuerta == "identidad"
+    coincidencias: Coincidencias = None  # obligatorio cuando compuerta == "identidad"
     resultado: Resultado | None = None  # obligatorio cuando tipo == "terminar"
 
 

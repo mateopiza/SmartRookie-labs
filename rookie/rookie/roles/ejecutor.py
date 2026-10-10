@@ -90,6 +90,28 @@ def _distingue_una(plan: Plan, coincidencias: list[dict]) -> bool:
     return sum(1 for f in coincidencias if coincide(f)) == 1
 
 
+_CAMPOS_IDENTIFICADORES = ("nombre", "razon", "nit", "documento", "cedula", "codigo", "id", "rut")
+
+
+def _claves_identidad(plan: Plan) -> set[str]:
+    """Valores que identifican el registro de un alta: la identificación del plan o, si viene
+    vacía, los valores de los campos tipo nombre/documento/código de los cambios autorizados."""
+    claves = {_norm(v) for v in plan.identificacion.values() if _norm(v)}
+    if not claves:
+        claves = {
+            _norm(c.valor) for c in plan.cambios_autorizados
+            if _norm(c.valor) and any(p in _norm(c.campo) for p in _CAMPOS_IDENTIFICADORES)
+        }
+    return claves
+
+
+def _duplicados(plan: Plan, coincidencias: list[dict]) -> list[dict]:
+    """Filas con algún valor IGUAL (no solo contenido) a un identificador del alta: ya existe.
+    Igualdad exacta normalizada, para que 'Los Andes Norte' no cuente como 'Los Andes'."""
+    claves = _claves_identidad(plan)
+    return [f for f in coincidencias if any(_norm(str(v)) in claves for v in f.values())]
+
+
 def _campo_de(accion: Accion, plan: Plan) -> str:
     if len(plan.cambios_autorizados) == 1:
         return _norm(plan.cambios_autorizados[0].campo)
@@ -132,6 +154,15 @@ def _aplicar_compuertas(
     # c. Compuerta de identidad
     if accion.compuerta == "identidad":
         coincidencias = accion.coincidencias or []
+        if any(not any(str(v).strip() for v in f.values()) for f in coincidencias):
+            return (
+                False,
+                (
+                    "RECHAZADO: hay coincidencias vacías; rellena nombre, identificador y texto de "
+                    "cada fila tal como se ven en pantalla."
+                ),
+                None,
+            )
         if len(coincidencias) == 0:
             if plan.tipo == "actualizar":
                 return False, None, Resultado(
@@ -140,6 +171,22 @@ def _aplicar_compuertas(
                 )
             estado.puede_crear = True  # crear: 0 coincidencias = no hay duplicado
             return True, "identidad: 0 coincidencias; no hay duplicado, se puede crear.", None
+        if plan.tipo == "crear":
+            # anti-duplicado: si ya existe un registro con ese nombre/documento, no se crea otro
+            dup = _duplicados(plan, coincidencias)
+            if dup:
+                ids = _identificadores(dup)
+                return False, None, Resultado(
+                    estado="fallida",
+                    detalle="ya existe un registro con esa identificación; no se crea un duplicado",
+                    datos_clave=ids,
+                )
+            estado.puede_crear = True
+            return (
+                True,
+                "identidad: las coincidencias parciales no son el mismo registro; se puede crear.",
+                None,
+            )
         if len(coincidencias) == 1 or _distingue_una(plan, coincidencias):
             estado.identidad_confirmada = True
             return True, "identidad: 1 registro distinguido; confirmada.", None
@@ -324,6 +371,7 @@ async def _verificar_final(
     guardias: Guardias,
     task_id: str,
     grabador: Grabador,
+    obs_terminar: Observacion | None = None,
 ) -> Resultado:
     try:
         guardias.comprobar()
@@ -377,8 +425,11 @@ async def _verificar_final(
             datos_clave=ver.datos_clave,
         )
 
-    # segunda comprobación independiente (juez, otro proveedor): sin ella no hay terminada
-    veredicto = await _veredicto_final_juez(final, plan, obs.png, cliente)
+    # segunda comprobación independiente (juez, otro proveedor): sin ella no hay terminada.
+    # Ve la captura sobre la que el ejecutor decidió terminar: los avisos de éxito ("… creado")
+    # son efímeros y ya no están en la captura de la verificación, pero el estado es el mismo.
+    png_juez = obs_terminar.png if obs_terminar is not None else obs.png
+    veredicto = await _veredicto_final_juez(final, plan, png_juez, cliente)
     grabador.paso(
         png=None,
         accion={"tipo": "veredicto_final"},
@@ -434,7 +485,8 @@ async def _bucle(
             fallos_modelo = 0
         except ModeloNoDisponible as exc:
             fallos_modelo += 1
-            log.warning("paso %d: modelo no disponible (%s)", paso, type(exc).__name__)
+            # el texto es la validación de la salida del modelo (nunca lleva la contraseña)
+            log.warning("paso %d: modelo no disponible: %s", paso, str(exc)[:400])
             if fallos_modelo >= 2:
                 return Resultado(estado="fallida", detalle="modelo no disponible")
             historial.append(f"paso {paso}: el modelo no respondió; reintento.")
@@ -456,7 +508,8 @@ async def _bucle(
                 return propuesto  # el ejecutor declara que no se pudo; no se "verifica" un fallo
             log.info("task_id=%s terminar propuesto; verificando", task_id)
             return await _verificar_final(
-                cliente, plan, propuesto, escritorio, guardias, task_id, grabador
+                cliente, plan, propuesto, escritorio, guardias, task_id, grabador,
+                obs_terminar=obs_actual,
             )
 
         # g. detección de bucle sobre pantalla sin cambios
@@ -496,7 +549,7 @@ async def _bucle(
                         log.info("task_id=%s identidad ambigua según el juez: %s", task_id, ids)
                         return Resultado(
                             estado="fallida",
-                            detalle=f"identidad ambigua: {veredicto.razon}",
+                            detalle=veredicto.razon or "identidad ambigua: el juez no la confirmó",
                             datos_clave=ids,
                         )
                 historial.append(f"paso {paso}: el juez rechazó la acción: {veredicto.razon}")

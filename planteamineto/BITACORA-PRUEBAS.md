@@ -20,3 +20,23 @@ Rol `juez` = `openai/gpt-5.6-luna-pro` vía OpenRouter (`reasoning.effort=low`),
   juez dentro de los 285 s.
 - Con la clave inválida (401), el juez caído respondió en < 0,5 s: identidad aprobada;
   guardar/crear/exportar rechazados con «juez no disponible».
+
+## Fase H · E1–E5 en vivo (10-oct-2026, sesión H1, agente local en :8077)
+
+Comando: `python -m pruebas_e2e.harness --agente http://127.0.0.1:8077 Ex` (desde `rookie/`).
+Observaciones paso a paso en `rookie/banco/observaciones/<task_id>/`.
+
+| Hora | Prueba | Pasos | s | Resultado | Causa | Arreglo |
+|---|---|---|---|---|---|---|
+| 14:10 | E1 | 29 | 173 | ✘ fallida (`__check` ok) | **compuerta**: el juez final recibió la captura de la verificación, ya sin el aviso efímero «Cliente CL-0141 creado», y negó la evidencia. Además **decisión**: llenó el formulario antes de buscar duplicados (crear rechazado, descartar, buscar, rellenar otra vez: 12 pasos perdidos) | El juez final ve la captura sobre la que el ejecutor decidió `terminar`. Prompt del ejecutor: en un alta, buscar en el listado y marcar `identidad` ANTES de abrir el formulario |
+| 14:16 | E1 | 18 | 129 | ✔ | — | — |
+| 14:19 | E1 sin reset | 5 | 71 | ✘ «modelo no disponible» | **transporte/esquema**: `coincidencias: list[dict[str,str]]` en modo `strict` llegaba como `[{}]`; el anti-duplicado y el juez de identidad no recibían datos (afecta también E2 y E5) | Esquema JSON con campos fijos `{nombre, identificador, texto}` (CAMBIOS-CONTRATO 14:25); el código rechaza filas vacías; anti-duplicado por código: en `crear`, una fila con nombre/documento IGUAL ⇒ fallida «ya existe» con el identificador |
+| 14:26 | E1 sin reset | — | — | inválida | un tercero mandó otra E1 (c5db6fbec34a) a :8077 y alguien reseteó el escritorio en medio. Esa tarea ajena sí terminó fallida «ya existe» con CL-0141 | coordinar: un solo cliente por escritorio |
+| 14:30 | E1 | 17 | 118 | ✔ | — | — |
+| 14:32 | E1 sin reset | 0 | 36 | ✘ «la tarea no se puede hacer» (sin duplicado) | **decisión** del orquestador: vio CL-0141 en la captura inicial y planeó `imposible`, sin nombrar el identificador | Prompt del orquestador: «imposible» solo por la instrucción, nunca por lo que muestre la pantalla |
+| 14:33 | E1 sin reset | 6 | 16 | ✔ fallida «ya existe un registro con esa identificación» · Datos: CL-0141 | — | — |
+
+Notas:
+- El formulario de un alta guardada se queda abierto con `Código: CL-0141`; NO es un borrador
+  (antes de guardar el formulario «Nuevo cliente» no tiene código). `__check` sin duplicados ✔.
+- Nunca usar `pkill -f` con un patrón que aparezca en la propia línea de comando: mata el shell.

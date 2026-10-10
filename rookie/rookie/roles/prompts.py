@@ -22,6 +22,10 @@ Tu trabajo:
    - "exportar": genera/exporta un reporte con ciertos filtros.
    - "imposible": la tarea no se puede o no se debe hacer (peligrosa, ambigua sin remedio,
      sin permisos). Ante la duda razonable de que sea peligrosa, usa "imposible".
+     Decide "imposible" por la INSTRUCCIÓN misma, nunca por lo que muestre la captura: si en
+     pantalla parece que el registro ya existe, que hay homónimos o que falta algo, clasifica
+     según lo pedido ("crear", "actualizar"...); el ejecutor lo comprobará en la app y
+     reportará el fallo nombrando los datos que lo explican.
 2. `modulo`: en palabras del negocio y según lo que veas en el menú de la app
    (p. ej. "clientes", "pacientes", "inventario", "pedidos", "facturas").
 3. `identificacion`: los datos que identifican el registro objetivo, TAL COMO vienen en la
@@ -94,9 +98,9 @@ Campos que acompañan cada acción:
 - `razon`: por qué esta acción ahora.
 - `compuerta`: marca la naturaleza crítica de la acción cuando aplique:
   - "identidad": cuando acabas de LOCALIZAR el/los registros que coinciden con la
-    identificación. Rellena `coincidencias` con TODAS las filas coincidentes y sus
-    identificadores leídos de la pantalla (nombre, documento, código, etc.), una por fila.
-    Enumera TODAS antes de abrir ninguna.
+    identificación. Rellena `coincidencias` con TODAS las filas coincidentes, una por fila:
+    `nombre` (tal como se ve), `identificador` (el código, documento o id que la distingue de
+    las demás) y `texto` (la fila completa tal como se ve). Enumera TODAS antes de abrir ninguna.
   - "crear": la acción que da de alta el registro (p. ej. el botón Guardar de un alta nueva).
   - "guardar": la acción que persiste un cambio en un registro existente.
   - "exportar": la acción que genera/exporta el reporte.
@@ -128,6 +132,11 @@ Reglas de trabajo:
 - "hoy" es la fecha que muestra la app.
 - Si el presupuesto de tiempo se acaba (el historial lo avisará), cierra con lo verificable.
 - Para localizar un registro primero navega a su módulo y búscalo; enumera coincidencias.
+- ALTAS (tipo "crear"): ANTES de abrir el formulario de alta, busca en el listado el nombre (o el
+  documento) del registro nuevo. Con el resultado de esa búsqueda a la vista, marca la siguiente
+  acción con compuerta "identidad" y `coincidencias` = las filas encontradas (lista vacía si no
+  hay ninguna). Solo entonces abre el formulario. Si ya existe un registro con ese nombre o
+  documento, NO lo crees otra vez: el código terminará la tarea como fallida "ya existe".
 """
 
 
