@@ -502,15 +502,21 @@ async def _exportar(plan: Plan, png: bytes, cliente: ClienteModelos) -> Veredict
 
     fallos: list[str] = []
     leidos: list[str] = []
+    no_visibles: list[str] = []
     for i, (k, esperado) in enumerate(filtros.items()):
         v = _buscar(lectura.valores, k, i)
         if v is None or not v.visible:
             if _norm(esperado) not in _SI_NO:  # una casilla sí/no puede no leerse como valor
-                fallos.append(f"{k}: no visible")
+                no_visibles.append(f"{k}: no visible")
             continue
         if not _filtro_igual(esperado, v.valor):
             fallos.append(f"{k}: en pantalla {v.valor!r}")
             leidos.append(f"{k}: {v.valor}")
+    # un único filtro sin lectura (visto: campo_fecha = «vencimiento», un selector sin texto)
+    # no bloquea si al menos otros dos se ven exactos; con más dudas, sí
+    correctos = len(filtros) - len(fallos) - len(no_visibles)
+    if len(no_visibles) > 1 or (no_visibles and correctos < 2):
+        fallos.extend(no_visibles)
     if lectura.hay_otros_filtros:
         fallos.append("hay otros filtros aplicados")
     if fallos:

@@ -668,3 +668,16 @@ def test_exportar_ignora_criterio_y_valores_descriptivos_y_acepta_todos_para_var
     lect2 = {"_LecturaFiltros": {"valores": [{"clave": "estado", "visible": True, "valor": "Todos"}],
                                  "hay_otros_filtros": False, "razon": ""}}
     assert not _run(juzgar_compuerta(acc, un_estado, PNG, FakeCliente(lect2))).aprobado
+
+
+def test_exportar_un_filtro_no_visible_con_otros_dos_exactos_aprueba():
+    plan = _plan(tipo="exportar", modulo="facturas", filtros={
+        "estado": "Pendiente", "campo_fecha": "vencimiento", "desde": "2026-10-01"})
+    vals = [{"clave": "estado", "visible": True, "valor": "Pendiente"},
+            {"clave": "campo_fecha", "visible": False, "valor": ""},
+            {"clave": "desde", "visible": True, "valor": "01/10/2026"}]
+    lect = {"_LecturaFiltros": {"valores": vals, "hay_otros_filtros": False, "razon": ""}}
+    acc = Accion(tipo="click", compuerta="exportar")
+    assert _run(juzgar_compuerta(acc, plan, PNG, FakeCliente(lect))).aprobado
+    vals[2]["visible"] = False
+    assert not _run(juzgar_compuerta(acc, plan, PNG, FakeCliente(lect))).aprobado
