@@ -977,3 +977,15 @@ def test_boton_anular_con_cambio_autorizado_a_anulada_es_guardar_no_eliminar():
                 cambios_autorizados=[Cambio(entidad="facturas", campo="telefono", valor="3001112233")])
     otra = E._compuerta_inferida(Accion(tipo="click", x=1, y=1, elemento="botón Anular factura"), sin)
     assert "eliminar no está autorizado" in _aplicar_compuertas(otra, sin, _Estado(identidad_confirmada=True))[1]
+
+
+def test_confirmar_dialogo_tras_guardar_aprobado_no_es_un_guardado_nuevo():
+    plan = _plan(tipo="actualizar", identificacion={"numero": "F-2201"},
+                 cambios_autorizados=[Cambio(entidad="facturas", campo="estado", valor="Pagada")])
+    estado = _Estado(identidad_confirmada=True, verificacion_pendiente=True)
+    acc = Accion(tipo="click", x=1, y=1, compuerta="guardar",
+                 elemento="botón Confirmar del diálogo Confirmar cambios")
+    permitido, motivo, _r = _aplicar_compuertas(acc, plan, estado)
+    assert permitido and acc.compuerta is None
+    otro = Accion(tipo="click", x=1, y=1, compuerta="guardar", elemento="botón Guardar")
+    assert "no se ha verificado" in _aplicar_compuertas(otro, plan, estado)[1]

@@ -160,6 +160,14 @@ def _compuerta_inferida(accion: Accion, plan: Plan) -> Accion:
     return accion
 
 
+def _confirma_dialogo(accion: Accion) -> bool:
+    """Clic en el botón que confirma un diálogo de confirmación («Confirmar», «Aceptar», «Sí»)."""
+    elemento = _norm(accion.elemento)
+    return accion.tipo == "click" and any(
+        p in elemento for p in ("confirmar", "aceptar", "boton si", "boton ok")
+    ) and any(p in elemento for p in ("dialogo", "modal", "confirm", "ventana"))
+
+
 def _cambio_por_boton(accion: Accion, plan: Plan) -> bool:
     """El botón aplica él mismo un cambio autorizado (visto: «Anular factura» con el cambio
     estado = «Anulada»): misma raíz de 5 letras entre el botón y el valor del cambio."""
@@ -317,6 +325,15 @@ def _aplicar_compuertas(
         )
 
     # d. Autorización de guardar / crear / exportar
+    if (
+        estado.verificacion_pendiente
+        and accion.compuerta in {"guardar", "crear"}
+        and _confirma_dialogo(accion)
+    ):
+        # segundo paso del MISMO guardado ya aprobado (visto: diálogo «Confirmar cambios» tras
+        # Guardar): no es un guardado nuevo, se pulsa sin volver a pasar por el juez
+        accion.compuerta = None
+        return True, None, None
     if estado.verificacion_pendiente and accion.compuerta in {"guardar", "crear"}:
         return (
             False,
