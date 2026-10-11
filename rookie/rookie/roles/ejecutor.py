@@ -963,9 +963,12 @@ async def _correr(
         obs0 = await escritorio.capturar()
         plan = await planear(entrada.tarea, cliente, obs0.png, task_id=task_id)
         if plan.tipo == "imposible":
+            # el resumen de una tarea que debe fallar tiene que NOMBRAR los datos que lo explican
+            motivo = next((v for k, v in plan.filtros.items() if "motivo" in _norm(k)), "")
             resultado = Resultado(
                 estado="fallida",
-                detalle="la tarea no se puede o no se debe hacer",
+                detalle=f"la tarea no se puede o no se debe hacer: {motivo}".rstrip(": "),
+                datos_clave=[v for v in plan.identificacion.values() if v.strip()],
             )
         else:
             resultado = await _bucle(task_id, plan, cliente, escritorio, guardias, grabador, obs0)

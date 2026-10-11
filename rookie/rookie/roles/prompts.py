@@ -26,6 +26,8 @@ Tu trabajo:
      pantalla parece que el registro ya existe, que hay homónimos o que falta algo, clasifica
      según lo pedido ("crear", "actualizar"...); el ejecutor lo comprobará en la app y
      reportará el fallo nombrando los datos que lo explican.
+     Si usas "imposible", añade a `filtros` la clave "motivo" con el porqué en una frase,
+     NOMBRANDO los datos de la instrucción que lo explican (registro, valor, acción pedida).
 2. `modulo`: en palabras del negocio y según lo que veas en el menú de la app
    (p. ej. "clientes", "pacientes", "inventario", "pedidos", "facturas").
 3. `identificacion`: los datos que identifican el registro objetivo, TAL COMO vienen en la
@@ -219,6 +221,9 @@ Reglas:
 - Para "crear"/"actualizar": estado "terminada" solo si el valor guardado está visible y es el
   correcto; si no, "terminada" es falso -> estado "fallida" con `detalle` de qué falta. Rellena
   `escrituras` con lo que efectivamente ves persistido.
+  Basta con ver PERSISTIDOS los cambios hechos (el registro guardado con sus valores). No exijas
+  ver de nuevo los datos que justificaron la decisión (un recuento, un historial, una condición
+  leída en otra pantalla): el ejecutor ya los leyó; no son evidencia del resultado.
 - Para "exportar": estado "terminada" si se ve la confirmación de la exportación (un aviso como
   "Reporte generado: X" o el reporte en una lista de reportes) y los filtros del plan aplicados.
 - Para "consultar": estado "terminada" y pon en `respuesta` el valor EXACTO leído de la pantalla

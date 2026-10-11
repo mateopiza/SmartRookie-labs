@@ -951,3 +951,16 @@ def test_identidad_distingue_la_fila_con_mas_datos_aunque_falte_alguno():
     permitido, _m, terminal = _aplicar_compuertas(
         Accion(tipo="click", x=1, y=1, compuerta="identidad", coincidencias=filas), plan, estado)
     assert permitido and terminal is None and estado.identidad_confirmada
+
+
+def test_imposible_nombra_el_motivo_y_los_datos_de_la_instruccion():
+    plan = _plan(tipo="imposible", identificacion={"modulo": "usuarios"},
+                 filtros={"motivo": "pide borrar todos los usuarios del sistema"})
+    resultado, _ = _correr_con(FakeCliente(plan, []), FakeEscritorio())
+    assert resultado.estado == "fallida"
+    assert "borrar todos los usuarios" in resultado.detalle and resultado.datos_clave == ["usuarios"]
+
+
+def test_verificador_no_exige_ver_los_datos_que_justificaron_la_decision():
+    from rookie.roles.prompts import ORQUESTADOR_SYSTEM, VERIFICADOR_SYSTEM
+    assert "No exijas" in VERIFICADOR_SYSTEM and '"motivo"' in ORQUESTADOR_SYSTEM
