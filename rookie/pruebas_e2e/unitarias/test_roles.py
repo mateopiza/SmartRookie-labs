@@ -940,3 +940,14 @@ def test_alta_no_toma_el_registro_relacionado_por_un_duplicado():
     fila = {"nombre": "Papelería Los Andes", "identificador": "CL-0141", "texto": "CL-0141"}
     assert "ya existe" in _aplicar_compuertas(
         Accion(tipo="click", x=1, y=1, compuerta="identidad", coincidencias=[fila]), e1, _Estado())[2].detalle
+
+
+def test_identidad_distingue_la_fila_con_mas_datos_aunque_falte_alguno():
+    plan = _plan(tipo="actualizar", identificacion={"numero": "F-2201", "paciente": "Esteban Quiroga",
+                                                    "cedula": "1098765432"})
+    filas = [{"nombre": "Esteban Quiroga", "identificador": "F-2201", "texto": "F-2201 Esteban Quiroga 220.000"},
+             {"nombre": "Esteban Quiroga", "identificador": "F-2188", "texto": "F-2188 Esteban Quiroga 85.000"}]
+    estado = _Estado()
+    permitido, _m, terminal = _aplicar_compuertas(
+        Accion(tipo="click", x=1, y=1, compuerta="identidad", coincidencias=filas), plan, estado)
+    assert permitido and terminal is None and estado.identidad_confirmada

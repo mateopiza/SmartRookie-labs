@@ -102,11 +102,15 @@ def _distingue_una(plan: Plan, coincidencias: list[dict]) -> bool:
     if not ident:
         return False
 
-    def coincide(fila: dict) -> bool:
+    def puntos(fila: dict) -> int:
         texto = _compacto(" ".join(str(v) for v in fila.values()))
-        return all(i in texto for i in ident)
+        return sum(1 for i in ident if i in texto)
 
-    return sum(1 for f in coincidencias if coincide(f)) == 1
+    # distinguida = una fila coincide con MÁS datos de la identificación que todas las demás (la
+    # fila puede no mostrar todos: visto en evaluación, número + paciente + cédula sin cédula en
+    # la tabla). Empate (homónimos con solo el nombre) = ambigüedad.
+    marcador = sorted((puntos(f) for f in coincidencias), reverse=True)
+    return bool(marcador) and marcador[0] >= 1 and (len(marcador) == 1 or marcador[0] > marcador[1])
 
 
 _CAMPOS_IDENTIFICADORES = ("nombre", "razon", "nit", "documento", "cedula", "codigo", "id", "rut")
