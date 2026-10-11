@@ -381,7 +381,7 @@ async def _identidad(accion: Accion, plan: Plan, png: bytes, cliente: ClienteMod
     return Veredicto(aprobado=False, razon=razon)
 
 
-async def _guardar(plan: Plan, png: bytes, cliente: ClienteModelos) -> Veredicto:
+async def _guardar(plan: Plan, png: bytes, cliente: ClienteModelos, elemento: str = "") -> Veredicto:
     cambios = plan.cambios_autorizados
     if not cambios:
         return Veredicto(aprobado=False, razon="el plan no tiene cambios autorizados que guardar")
@@ -410,6 +410,9 @@ async def _guardar(plan: Plan, png: bytes, cliente: ClienteModelos) -> Veredicto
     correctos = 0
     for i, c in enumerate(cambios):
         v = _buscar(lectura.valores, c.campo, i)
+        if len(_compacto(c.valor)) >= 5 and _compacto(c.valor)[:5] in _compacto(elemento):
+            correctos += 1  # el propio botón aplica este cambio («Anular» ⇒ «Anulada»)
+            continue
         if v is None or not v.visible or not _compacto(v.valor):
             notas.append(f"{c.campo}: no visible")
             continue
@@ -501,7 +504,7 @@ async def juzgar_compuerta(
         if accion.compuerta == "identidad":
             veredicto = await _identidad(accion, plan, observacion_png, cliente)
         elif accion.compuerta == "guardar":
-            veredicto = await _guardar(plan, observacion_png, cliente)
+            veredicto = await _guardar(plan, observacion_png, cliente, accion.elemento)
         elif accion.compuerta == "crear":
             veredicto = await _crear(plan, observacion_png, cliente)
         elif accion.compuerta == "exportar":

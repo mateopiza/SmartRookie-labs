@@ -964,3 +964,16 @@ def test_imposible_nombra_el_motivo_y_los_datos_de_la_instruccion():
 def test_verificador_no_exige_ver_los_datos_que_justificaron_la_decision():
     from rookie.roles.prompts import ORQUESTADOR_SYSTEM, VERIFICADOR_SYSTEM
     assert "No exijas" in VERIFICADOR_SYSTEM and '"motivo"' in ORQUESTADOR_SYSTEM
+
+
+def test_boton_anular_con_cambio_autorizado_a_anulada_es_guardar_no_eliminar():
+    plan = _plan(tipo="actualizar", identificacion={"numero": "F-2201"},
+                 cambios_autorizados=[Cambio(entidad="facturas", campo="estado", valor="Anulada")])
+    estado = _Estado(identidad_confirmada=True)
+    accion = E._compuerta_inferida(Accion(tipo="click", x=1, y=1, elemento="botón Anular factura"), plan)
+    permitido, motivo, _t = _aplicar_compuertas(accion, plan, estado)
+    assert permitido and accion.compuerta == "guardar"
+    sin = _plan(tipo="actualizar", identificacion={"numero": "F-2201"},
+                cambios_autorizados=[Cambio(entidad="facturas", campo="telefono", valor="3001112233")])
+    otra = E._compuerta_inferida(Accion(tipo="click", x=1, y=1, elemento="botón Anular factura"), sin)
+    assert "eliminar no está autorizado" in _aplicar_compuertas(otra, sin, _Estado(identidad_confirmada=True))[1]

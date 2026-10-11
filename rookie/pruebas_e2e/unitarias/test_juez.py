@@ -639,3 +639,12 @@ def test_total_repartido_en_paginas_se_suma_por_codigo():
     mal = Resultado(estado="terminada", respuesta="2500000")
     assert not _run(J.verificar_conteo(mal, plan, [PNG, PNG], FakeCliente(pag))).aprobado
     assert J._es_suma("total adeudado") and not J._es_suma("número de facturas vencidas")
+
+
+def test_guardar_con_boton_que_aplica_el_cambio_cuenta_como_correcto():
+    plan = _plan(identificacion={"numero": "F-2201"},
+                 cambios_autorizados=[Cambio(entidad="facturas", campo="estado", valor="Anulada")])
+    lect = {"_LecturaFormulario": {"valores": [{"clave": "estado", "visible": True, "valor": "Pendiente"}],
+                                   "otros_campos_cambiados": False, "razon": ""}}
+    acc = Accion(tipo="click", compuerta="guardar", elemento="botón Anular factura")
+    assert _run(juzgar_compuerta(acc, plan, PNG, FakeCliente(lect))).aprobado

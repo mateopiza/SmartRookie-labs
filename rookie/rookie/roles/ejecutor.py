@@ -160,6 +160,16 @@ def _compuerta_inferida(accion: Accion, plan: Plan) -> Accion:
     return accion
 
 
+def _cambio_por_boton(accion: Accion, plan: Plan) -> bool:
+    """El botón aplica él mismo un cambio autorizado (visto: «Anular factura» con el cambio
+    estado = «Anulada»): misma raíz de 5 letras entre el botón y el valor del cambio."""
+    elemento = _compacto(accion.elemento)
+    return plan.tipo == "actualizar" and any(
+        len(_compacto(c.valor)) >= 5 and _compacto(c.valor)[:5] in elemento
+        for c in plan.cambios_autorizados
+    )
+
+
 # Teclas que el ejecutor puede pulsar. Cualquier otra (End, Home, F1–F12, alt+…, ctrl+… salvo
 # ctrl+a) se rechaza: End sacó al agente de un formulario y una tecla de función abrió DevTools.
 # Delete NO: en el escritorio con el tema nuevo inserta un carácter basura (□) en el campo.
@@ -239,6 +249,10 @@ def _aplicar_compuertas(
             ),
             None,
         )
+
+    # un botón que aplica un cambio autorizado (Anular ⇒ estado Anulada) es un guardado, no un borrado
+    if accion.compuerta == "eliminar" and _cambio_por_boton(accion, plan):
+        accion.compuerta = "guardar"
 
     # eliminar nunca se autoriza
     if accion.compuerta == "eliminar":
