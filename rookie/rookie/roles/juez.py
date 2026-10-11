@@ -455,8 +455,31 @@ async def _crear(plan: Plan, png: bytes, cliente: ClienteModelos) -> Veredicto:
     return Veredicto(aprobado=True, razon="no se ve un registro existente con esa identificación")
 
 
+_NO_ES_FILTRO = ("criterio", "motivo", "alternativa")
+_SI_NO = ("si", "no", "true", "false")
+
+
+def _filtros_de_pantalla(plan: Plan) -> dict[str, str]:
+    """Filtros del plan que deben verse tal cual en pantalla. Quedan fuera las instrucciones
+    (criterio, motivo…) y los valores que describen en vez de dar un literal (visto: periodo =
+    «el mismo período que cubre el último reporte…»)."""
+    return {
+        k: v for k, v in plan.filtros.items()
+        if not any(p in _norm(k) for p in _NO_ES_FILTRO) and len(_norm(v).split()) <= 6
+    }
+
+
+def _filtro_igual(esperado: str, en_pantalla: str) -> bool:
+    """«Todos» vale para un filtro que pide varias opciones a la vez (visto: estado = «aplicados
+    y reversados» y la app solo deja elegir uno o Todos)."""
+    if _igual(esperado, en_pantalla):
+        return True
+    varios = len([x for x in re.split(r",| y | e | o ", _norm(esperado)) if x.strip()]) >= 2
+    return varios and _norm(en_pantalla) in ("todos", "todas", "todo")
+
+
 async def _exportar(plan: Plan, png: bytes, cliente: ClienteModelos) -> Veredicto:
-    filtros = plan.filtros
+    filtros = _filtros_de_pantalla(plan)
     if filtros:
         lista = "\n".join(f"- clave {k!r}: valor esperado {v!r}" for k, v in filtros.items())
         pregunta = (
@@ -482,9 +505,10 @@ async def _exportar(plan: Plan, png: bytes, cliente: ClienteModelos) -> Veredict
     for i, (k, esperado) in enumerate(filtros.items()):
         v = _buscar(lectura.valores, k, i)
         if v is None or not v.visible:
-            fallos.append(f"{k}: no visible")
+            if _norm(esperado) not in _SI_NO:  # una casilla sí/no puede no leerse como valor
+                fallos.append(f"{k}: no visible")
             continue
-        if not _igual(esperado, v.valor):
+        if not _filtro_igual(esperado, v.valor):
             fallos.append(f"{k}: en pantalla {v.valor!r}")
             leidos.append(f"{k}: {v.valor}")
     if lectura.hay_otros_filtros:
@@ -696,7 +720,7 @@ async def _final_escritura(resultado: Resultado, plan: Plan, png: bytes, cliente
 
 
 async def _final_exportacion(plan: Plan, png: bytes, cliente: ClienteModelos) -> Veredicto:
-    filtros = plan.filtros
+    filtros = _filtros_de_pantalla(plan)
     lista = "\n".join(f"- clave {k!r}: valor esperado {v!r}" for k, v in filtros.items())
     pregunta = (
         "Se acaba de exportar un reporte. Indica en `evidencia` si la pantalla muestra que la "
@@ -717,7 +741,7 @@ async def _final_exportacion(plan: Plan, png: bytes, cliente: ClienteModelos) ->
     leidos: list[str] = []
     for i, (k, esperado) in enumerate(filtros.items()):
         v = _buscar(lectura.valores, k, i)
-        if v is not None and v.visible and _compacto(v.valor) and not _igual(esperado, v.valor):
+        if v is not None and v.visible and _compacto(v.valor) and not _filtro_igual(esperado, v.valor):
             fallos.append(f"{k}: en pantalla {v.valor!r}")
             leidos.append(f"{k}: {v.valor}")
     if not lectura.evidencia:

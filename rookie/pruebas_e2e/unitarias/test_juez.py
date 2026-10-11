@@ -648,3 +648,23 @@ def test_guardar_con_boton_que_aplica_el_cambio_cuenta_como_correcto():
                                    "otros_campos_cambiados": False, "razon": ""}}
     acc = Accion(tipo="click", compuerta="guardar", elemento="botón Anular factura")
     assert _run(juzgar_compuerta(acc, plan, PNG, FakeCliente(lect))).aprobado
+
+
+def test_exportar_ignora_criterio_y_valores_descriptivos_y_acepta_todos_para_varias_opciones():
+    plan = _plan(tipo="exportar", modulo="pagos", filtros={
+        "medio": "Transferencia", "estado": "aplicados y reversados", "incluir_reversados": "sí",
+        "periodo": "el mismo período que cubre el último reporte de pagos generado",
+        "criterio": "el último reporte de pagos que generó facturación"})
+    lect = {"_LecturaFiltros": {"valores": [
+        {"clave": "medio", "visible": True, "valor": "Transferencia"},
+        {"clave": "estado", "visible": True, "valor": "Todos"},
+        {"clave": "incluir_reversados", "visible": False, "valor": ""},
+    ], "hay_otros_filtros": False, "razon": ""}}
+    acc = Accion(tipo="click", compuerta="exportar")
+    assert _run(juzgar_compuerta(acc, plan, PNG, FakeCliente(lect))).aprobado
+    lect["_LecturaFiltros"]["valores"][0]["valor"] = "Efectivo"
+    assert not _run(juzgar_compuerta(acc, plan, PNG, FakeCliente(lect))).aprobado
+    un_estado = _plan(tipo="exportar", modulo="pagos", filtros={"estado": "Aplicado"})
+    lect2 = {"_LecturaFiltros": {"valores": [{"clave": "estado", "visible": True, "valor": "Todos"}],
+                                 "hay_otros_filtros": False, "razon": ""}}
+    assert not _run(juzgar_compuerta(acc, un_estado, PNG, FakeCliente(lect2))).aprobado
