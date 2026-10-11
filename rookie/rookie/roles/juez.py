@@ -726,6 +726,50 @@ async def _final_exportacion(plan: Plan, png: bytes, cliente: ClienteModelos) ->
     return Veredicto(aprobado=True, razon="exportación visible con los filtros del plan")
 
 
+_PALABRAS_SUMA = ("total", "suma", "valor", "monto", "saldo", "adeud", "importe", "pagar", "deuda")
+_PALABRAS_CONTEO = ("cuant", "numero de", "cantidad", "conteo")
+
+
+def _es_suma(datos: str) -> bool:
+    d = _norm(datos)
+    return any(p in d for p in _PALABRAS_SUMA) and not any(p in d for p in _PALABRAS_CONTEO)
+
+
+async def _verificar_suma(
+    resultado: Resultado, plan: Plan, pngs: list[bytes], cliente: ClienteModelos,
+    datos: str, esperado: float,
+) -> Veredicto:
+    """Un total repartido en páginas (visto: «total adeudado por facturas vencidas» = 2.375.000):
+    el juez lista «código = importe» por página y el CÓDIGO suma una vez por código."""
+    pregunta = (
+        f"Esta captura es UNA página de un listado. Se suma: {datos}.\n"
+        f"Registro: {_describir(plan.identificacion)}. Filtros: {_describir(plan.filtros)}.\n"
+        "Para cada fila VISIBLE que cumple los filtros, escribe en `identificadores` una entrada "
+        "'CÓDIGO = IMPORTE' con el código o id de la fila y el importe que se suma, tal como se ven. "
+        "Si un dato de los filtros no aparece como columna, no descartes la fila por eso. "
+        "`filas_que_cumplen` es cuántas listaste. Si la captura no es un listado, 0."
+    )
+    lecturas = await asyncio.gather(
+        *(_leer(cliente, _LecturaConteo, pregunta, png, f"suma-{i + 1}") for i, png in enumerate(pngs))
+    )
+    if any(lec is None for lec in lecturas):
+        return _no_disponible(False)
+    importes: dict[str, float] = {}
+    for lec in lecturas:
+        for entrada in lec.identificadores:
+            codigo, _, importe = entrada.rpartition("=")
+            valor = _numero(importe)
+            if _compacto(codigo) and valor is not None:
+                importes.setdefault(_compacto(codigo), valor)
+    if not importes:
+        return await _final_consulta(resultado, plan, pngs[-1], cliente)
+    total = sum(importes.values())
+    log.info("juez suma filas=%d total=%s esperado=%s", len(importes), total, esperado)
+    if abs(total - esperado) <= max(1.0, abs(esperado) * 0.001):
+        return Veredicto(aprobado=True, razon=f"suma por páginas confirmada: {total:g}")
+    return Veredicto(aprobado=False, razon=f"la suma del juez por páginas es {total:g}, no {resultado.respuesta}")
+
+
 async def verificar_conteo(
     resultado: Resultado, plan: Plan, pngs: list[bytes], cliente: ClienteModelos
 ) -> Veredicto:
@@ -736,6 +780,8 @@ async def verificar_conteo(
     if esperado is None:
         return Veredicto(aprobado=False, razon="consulta sin número que verificar")
     datos = ", ".join(plan.pregunta.datos) if plan.pregunta and plan.pregunta.datos else "filas"
+    if _es_suma(datos):
+        return await _verificar_suma(resultado, plan, pngs, cliente, datos, esperado)
     pregunta = (
         f"Esta captura es UNA página de un listado. Se cuentan: {datos}.\n"
         f"Registro: {_describir(plan.identificacion)}. Filtros: {_describir(plan.filtros)}.\n"

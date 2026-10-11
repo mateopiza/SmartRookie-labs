@@ -625,3 +625,17 @@ def test_texto_visible_acepta_una_fecha_en_otro_formato():
     otra = {"_LecturaFinal": {"valores": [{"clave": "texto", "visible": True, "valor": "2026-10-15"}],
                               "evidencia": True, "razon": ""}}
     assert not _run(J.texto_visible("14/10/2026", PNG, FakeCliente(otra))).aprobado
+
+
+def test_total_repartido_en_paginas_se_suma_por_codigo():
+    plan = _plan(tipo="consultar", modulo="facturas", identificacion={"paciente": "Ana Torres"},
+                 pregunta=Pregunta(datos=["total adeudado por facturas vencidas"], formato="numero"))
+    pag = {"_LecturaConteo": {"filas_que_cumplen": 3, "razon": "",
+           "identificadores": ["F-1 = 1.000.000", "F-2 = 875.000", "F-3 = 500.000"]}}
+    res = Resultado(estado="terminada", respuesta="2375000")
+    cli = FakeCliente(pag)
+    assert _run(J.verificar_conteo(res, plan, [PNG, PNG], cli)).aprobado  # la misma página dos veces no duplica
+    assert "IMPORTE" in cli.llamadas[0]["texto"]
+    mal = Resultado(estado="terminada", respuesta="2500000")
+    assert not _run(J.verificar_conteo(mal, plan, [PNG, PNG], FakeCliente(pag))).aprobado
+    assert J._es_suma("total adeudado") and not J._es_suma("número de facturas vencidas")
