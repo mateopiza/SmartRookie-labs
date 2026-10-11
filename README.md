@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/smartrookie-github-banner.png" alt="SmartRookie" width="100%"></p>
+
 # Reto 1 · El agente que opera lo que no tiene API
 
 Una empresa usa hace 15 años un sistema de gestión sin API, sin documentación y sin proveedor. Todo
